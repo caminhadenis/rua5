@@ -49,4 +49,10 @@ export class PlayerWalkAnimation {
     this.distance = 0
     this.player.setFrame(`${this.facing}-0`)
   }
+
+  face(direction: 'up' | 'down' | 'left' | 'right'): void {
+    this.facing = direction === 'up' ? 'back' : direction === 'down' ? 'front' : 'side'
+    this.player.setFlipX(direction === 'left')
+    this.stop()
+  }
 }

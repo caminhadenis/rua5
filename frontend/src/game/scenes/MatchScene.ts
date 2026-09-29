@@ -4,6 +4,7 @@ import { gameAudio } from '../audio/GameAudio'
 import { request, type DuelResponse, type MatchEvent, type RosterPlayer } from '../../api/gameApi'
 import { emotionsForOutcome, type DuelEmotion } from '../match/duelEmotions'
 import { Playback, presentEvent } from '../match/Playback'
+import { onGoalArrival } from '../match/goalArrival'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 import { recruitmentPanel } from '../ui/RecruitmentPanel'
 
@@ -16,8 +17,11 @@ export class MatchScene extends Phaser.Scene {
   private progress!: HTMLProgressElement
   private controls!: HTMLElement
   private finished = false
+  private pendingGoal?: () => void
   constructor() { super('MatchScene') }
   init(result: DuelResponse): void {
+    this.pendingGoal?.()
+    this.pendingGoal = undefined
     this.result = result
     this.playback = new Playback(result.match.events)
     this.finished = false
@@ -35,6 +39,7 @@ export class MatchScene extends Phaser.Scene {
       </div>
       <div class="duel-arena" aria-hidden="true">
         <div class="court-lines"></div><div class="court-circle"></div>
+        <div class="duel-goal goal-home" aria-hidden="true"></div><div class="duel-goal goal-away" aria-hidden="true"></div>
         <div class="duelist home"><div class="duel-sprite"></div><div class="duel-platform"></div></div>
         <span class="duel-versus">VS</span>
         <div class="duelist away"><div class="duel-sprite"></div><div class="duel-platform"></div></div>
@@ -73,22 +78,42 @@ export class MatchScene extends Phaser.Scene {
   private showEvents(events: readonly MatchEvent[]): void {
     const event = events.at(-1)
     if (!event) return
-    if (event.type === 'GOAL') gameAudio.play('goal')
-    this.caption.textContent = presentEvent(event, [...this.result.match.home, ...this.result.match.away])
-    this.caption.title = this.caption.textContent
-    this.caption.dataset.sequence = String(event.sequence)
-    this.clock.textContent = `${event.minute}' · EM JOGO`
-    this.progress.value = event.sequence / this.result.match.events.length * 100
-    // The backend supplies the score at this exact event. Never count goals in the client.
-    this.showScore(event.homeScore, event.awayScore)
+    this.pendingGoal?.()
+    this.pendingGoal = undefined
+    const participants = [...this.result.match.home, ...this.result.match.away]
     this.panel.dataset.side = event.side.toLowerCase()
-    this.panel.classList.toggle('is-goal', event.type === 'GOAL')
+    this.panel.classList.remove('is-goal')
+    const ball = this.panel.querySelector<HTMLElement>('.duel-ball')!
+    ball.dataset.shot = event.type === 'GOAL' ? event.side.toLowerCase() :
+      event.type === 'SHOT_MISSED' ? `${event.side.toLowerCase()}-miss` :
+        event.type === 'SAVE' ? `${event.side.toLowerCase()}-save` : 'reset'
+    ball.dataset.sequence = String(event.sequence)
     this.panel.querySelectorAll<HTMLElement>('.duelist').forEach(duelist => {
       const side = duelist.classList.contains('home') ? 'home' : 'away'
       const acting = side === event.side.toLowerCase()
       duelist.classList.toggle('is-active', acting)
-      this.showEmotion(side, acting && event.type === 'GOAL' ? 'happy' : 'neutral')
+      this.showEmotion(side, 'neutral')
     })
+    const reveal = () => {
+      if (!this.scene.isActive() || this.finished) return
+      this.caption.textContent = presentEvent(event, participants)
+      this.caption.title = this.caption.textContent
+      this.caption.dataset.sequence = String(event.sequence)
+      this.clock.textContent = `${event.minute}' · EM JOGO`
+      this.progress.value = event.sequence / this.result.match.events.length * 100
+      // The backend supplies the score at this exact event. Never count goals in the client.
+      this.showScore(event.homeScore, event.awayScore)
+      if (event.type === 'GOAL') {
+        this.panel.classList.add('is-goal')
+        this.showEmotion(event.side.toLowerCase() as 'home' | 'away', 'happy')
+        gameAudio.play('goal')
+      }
+    }
+    if (event.type === 'GOAL') {
+      this.caption.textContent = presentEvent({ ...event, type: 'SHOT' }, participants)
+      this.caption.title = this.caption.textContent
+      this.pendingGoal = onGoalArrival(ball, reveal)
+    } else reveal()
   }
   private showEmotion(side: 'home' | 'away', emotion: DuelEmotion): void {
     const duelist = this.panel.querySelector<HTMLElement>(`.duelist.${side}`)!
@@ -108,6 +133,8 @@ export class MatchScene extends Phaser.Scene {
   }
   private finish(): void {
     if (this.finished) return
+    this.pendingGoal?.()
+    this.pendingGoal = undefined
     this.finished = true
     this.panel.classList.add('is-finished')
     this.panel.classList.remove('is-goal')

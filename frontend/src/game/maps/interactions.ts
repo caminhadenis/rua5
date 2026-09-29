@@ -3,10 +3,22 @@ export interface Position {
   y: number
 }
 
+export type Facing = 'up' | 'down' | 'left' | 'right'
+
 export const INTERACTION_RADIUS = 60
 
 export function canInteract(player: Position, target: Position): boolean {
   return Math.hypot(player.x - target.x, player.y - target.y) <= INTERACTION_RADIUS
+}
+
+/** A challenger only notices players in the short cone in front of their facing. */
+export function canDetectChallenger(player: Position, target: Position, facing: Facing): boolean {
+  const dx = player.x - target.x
+  const dy = player.y - target.y
+  if (Math.hypot(dx, dy) > INTERACTION_RADIUS) return false
+  const forward = facing === 'up' ? -dy : facing === 'down' ? dy : facing === 'left' ? -dx : dx
+  const lateral = facing === 'up' || facing === 'down' ? Math.abs(dx) : Math.abs(dy)
+  return forward > 0 && forward <= INTERACTION_RADIUS && lateral <= 34
 }
 
 // Static presentation only. No challenger availability or progress is inferred here.
@@ -21,6 +33,7 @@ export const CHALLENGERS = [
   { playerDefinitionId: 'npc_zeca_01', name: 'Zeca', dialogue: 'Chegou quase ao estádio! Minha velocidade pode ajudar contra Íris e Tito. Revanches rendem menos XP; explore a equipe.' },
 ].map((content, index) => ({
   ...content,
+  facing: (['left', 'up', 'right', 'down'] as const)[index % 4]!,
   kind: 'challenger' as const,
   id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
   spawnKey: `benfica.court.${String(index + 1).padStart(2, '0')}`,
@@ -31,10 +44,10 @@ export const CHALLENGER = CHALLENGERS[0]!
 /** Opens once per approach; the wider exit radius avoids flicker at the boundary. */
 export class ApproachDialogue {
   private greeted = false
-  update(player: Position, target: Position): boolean {
+  update(player: Position, target: Position, facing: Facing): boolean {
     const distance = Math.hypot(player.x - target.x, player.y - target.y)
     if (distance > INTERACTION_RADIUS + 20) this.greeted = false
-    if (distance > INTERACTION_RADIUS || this.greeted) return false
+    if (!canDetectChallenger(player, target, facing) || this.greeted) return false
     this.greeted = true
     return true
   }

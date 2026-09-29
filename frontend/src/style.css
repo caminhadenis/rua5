@@ -73,6 +73,9 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .duel-score { display: flex; align-items: center; justify-content: center; gap: 16px; background: #0c171f; padding: 6px 22px; border: 2px solid #52665e; box-shadow: 0 4px 0 #080f16; font-size: clamp(40px, 7vw, 64px); font-weight: bold; font-variant-numeric: tabular-nums; color: #fff4ce; }
 .score-divider { color: #68817a; font-size: 24px; }
 .duel-arena { position: relative; flex: 1; min-height: 120px; max-height: 260px; overflow: hidden; border: 2px solid #426454; background: repeating-linear-gradient(0deg, #25493d 0 32px, #294e41 32px 64px); }
+.duel-goal { position: absolute; top: 28%; width: 44px; height: 44%; border: 4px solid #fff4ce; background-color: #142e2b; background-image: linear-gradient(90deg, #a9bea08c 2px, transparent 2px), linear-gradient(#a9bea08c 2px, transparent 2px); background-size: 9px 9px; box-shadow: inset 0 0 0 2px #537660; z-index: 2; }
+.duel-goal.goal-home { right: 0; border-left: 0; }
+.duel-goal.goal-away { left: 0; border-right: 0; }
 .court-lines { position: absolute; inset: 12px; border: 2px solid #95a97a55; }
 .court-lines::before { content: ''; position: absolute; left: 50%; height: 100%; border-left: 2px solid #95a97a55; }
 .court-circle { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; transform: translate(-50%, -50%); border: 2px solid #95a97a55; border-radius: 50%; }
@@ -87,9 +90,27 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .home.is-active .duel-platform { border-color: #f7d154; }
 .away.is-active .duel-platform { border-color: #f3987b; }
 .duelist.is-active .duel-sprite { translate: 0 -4px; }
-.duel-ball { position: absolute; top: 65%; left: 49%; width: 12px; height: 12px; background: #fff4ce; border: 3px solid #14252c; box-shadow: 2px 2px 0 #132a23; transition: left 220ms steps(4); }
+.duel-ball { position: absolute; top: 65%; left: 49%; width: 12px; height: 12px; background: #fff4ce; border: 3px solid #14252c; box-shadow: 2px 2px 0 #132a23; z-index: 3; }
 [data-side="home"] .duel-ball { left: 32%; }
 [data-side="away"] .duel-ball { left: 66%; }
+.duel-ball[data-shot="home"] { animation: shot-home 680ms steps(8) forwards; }
+.duel-ball[data-shot="away"] { animation: shot-away 680ms steps(8) forwards; }
+.duel-ball[data-shot="home-miss"] { animation: shot-miss-home 560ms steps(7) forwards; }
+.duel-ball[data-shot="away-miss"] { animation: shot-miss-away 560ms steps(7) forwards; }
+.duel-ball[data-shot="home-save"] { animation: shot-save-home 500ms steps(6) forwards; }
+.duel-ball[data-shot="away-save"] { animation: shot-save-away 500ms steps(6) forwards; }
+@keyframes shot-home { to { left: calc(100% - 20px); top: 48%; } }
+@keyframes shot-away { to { left: 9px; top: 48%; } }
+@keyframes shot-miss-home { to { left: 88%; top: 9%; } }
+@keyframes shot-miss-away { to { left: 12%; top: 9%; } }
+@keyframes shot-save-home { to { left: 86%; top: 48%; } }
+@keyframes shot-save-away { to { left: 14%; top: 48%; } }
+.duel-panel.is-goal[data-side="home"] .goal-home, .duel-panel.is-goal[data-side="away"] .goal-away { border-color: #f7d154; }
+.scene-transition { position: fixed; inset: 0; z-index: 20000; pointer-events: none; background: #101b20; }
+.scene-transition-close { animation: scene-close 240ms steps(6) forwards; }
+.scene-transition-open { animation: scene-open 240ms steps(6) forwards; }
+@keyframes scene-close { from { clip-path: inset(0 100% 0 100%); } to { clip-path: inset(0); } }
+@keyframes scene-open { from { clip-path: inset(0); } to { clip-path: inset(0 100% 0 100%); } }
 .duel-time { display: flex; align-items: center; gap: 12px; color: #a6bcac; font-size: 11px; letter-spacing: 1px; }
 .duel-time > span:first-child { min-width: 110px; }
 .duel-time progress { flex: 1; min-width: 0; height: 5px; border: 0; appearance: none; background: #2a4244; }
@@ -211,6 +232,9 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .stadium-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; text-align: center; color: #b8c5b7; font-size: 13px; }
 .stadium-scoreboard strong { display: block; min-width: 160px; padding: 4px 12px; border: 2px solid #52665e; background: #0c171f; color: #fff4ce; font-size: clamp(28px, 5vw, 48px); font-variant-numeric: tabular-nums; }
 .stadium-pitch { position: relative; flex: 1; min-height: 300px; max-height: 490px; overflow: hidden; border: 4px solid #b7c49b; background: repeating-linear-gradient(90deg, #244c3b 0 80px, #2a563f 80px 160px); }
+.stadium-goal { position: absolute; top: 34%; width: 44px; height: 32%; border: 4px solid #fff4ce; background-color: #142e2b; background-image: linear-gradient(90deg, #a9bea08c 2px, transparent 2px), linear-gradient(#a9bea08c 2px, transparent 2px); background-size: 9px 9px; box-shadow: inset 0 0 0 2px #537660; z-index: 2; }
+.stadium-goal.goal-home { right: 0; border-left: 0; }
+.stadium-goal.goal-away { left: 0; border-right: 0; }
 .stadium-field-lines { position: absolute; inset: 4%; border: 2px solid #c9d5a588; pointer-events: none; }
 .stadium-field-lines::before { content: ''; position: absolute; left: 50%; top: 0; height: 100%; border-left: 2px solid #c9d5a588; }
 .stadium-field-lines::after { content: ''; position: absolute; left: 0; top: 25%; width: 100%; height: 50%; border-top: 1px solid #c9d5a544; border-bottom: 1px solid #c9d5a544; }
@@ -224,7 +248,20 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .stadium-athlete.is-active { z-index: 4; }
 .stadium-athlete.is-active .stadium-athlete-sprite { translate: 0 -5px; filter: drop-shadow(0 0 5px #fff4ce); }
 .stadium-ball { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, 50%); background: #fff4ce; border: 3px solid #14252c; z-index: 5; transition: left 320ms steps(4), top 320ms steps(4); }
+.stadium-ball[data-shot="home"] { animation: stadium-shot-home 680ms steps(8) forwards; }
+.stadium-ball[data-shot="away"] { animation: stadium-shot-away 680ms steps(8) forwards; }
+.stadium-ball[data-shot="home-miss"] { animation: stadium-miss-home 420ms steps(4) forwards; }
+.stadium-ball[data-shot="away-miss"] { animation: stadium-miss-away 420ms steps(4) forwards; }
+.stadium-ball[data-shot="home-save"] { animation: stadium-save-home 360ms steps(3) forwards; }
+.stadium-ball[data-shot="away-save"] { animation: stadium-save-away 360ms steps(3) forwards; }
+@keyframes stadium-shot-home { to { left: calc(100% - 20px); top: 50%; } }
+@keyframes stadium-shot-away { to { left: 20px; top: 50%; } }
+@keyframes stadium-miss-home { to { left: 87%; top: 12%; } }
+@keyframes stadium-miss-away { to { left: 13%; top: 12%; } }
+@keyframes stadium-save-home { to { left: 82%; top: 50%; } }
+@keyframes stadium-save-away { to { left: 18%; top: 50%; } }
 .stadium-pitch.is-goal { border-color: #f7d154; }
+.stadium-pitch.is-goal .stadium-goal { border-color: #f7d154; }
 .stadium-timeline { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #b8c5b7; }
 .stadium-timeline span { min-width: 135px; }
 .stadium-timeline progress { flex: 1; height: 7px; accent-color: #f7d154; }

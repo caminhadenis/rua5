@@ -167,8 +167,8 @@ Na primeira visita, informe o nome, clique **Começar** e escolha um dos três s
 Uma sessão existente entra no mundo com seu elenco persistido.
 
 - **Setas / WASD:** caminhar; vá à direita até Nilo na quadra.
-- Ao se aproximar de Nilo, a fala abre automaticamente uma vez por aproximação.
-- **E / Enter:** reabrir o diálogo quando estiver próximo.
+- Ao entrar na área à frente de um desafiante, o personagem para, o NPC caminha até ele e a fala abre após a aproximação, uma vez por entrada na área.
+- **E / Enter:** reabrir o diálogo quando estiver próximo e à frente do desafiante.
 - **Enter / DESAFIAR:** escolher um cartão com boneco, nome, nível e XP do elenco e iniciar o duelo.
   Os cartões permitem seleção por clique ou teclado (Tab e setas).
 - **E / Esc:** fechar o diálogo.
@@ -204,6 +204,7 @@ aproximadamente entre 71% e 82%, conforme o starter. Essa alteração vale para 
 resultados, XP e recompensas já salvos permanecem iguais.
 
 O playback usa uma base de aproximadamente 30 segundos, acrescida das comemorações de gol.
+Em um gol, a bola entra na rede antes de aparecer a mensagem e o placar do lance.
 O autor do gol levanta os braços, com mensagem por 1,8 s (mínimo de 0,9 s em 4×).
 No final, o vencedor fica feliz e o perdedor cabisbaixo; em empate ficam neutros. Acelerar/pular só alteram a apresentação:
 placar e recompensas já foram persistidos pelo servidor. Em falha de resposta, **Tentar

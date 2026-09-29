@@ -8,7 +8,7 @@ import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 
 import { PlayerWalkAnimation } from '../entities/PlayerWalkAnimation'
 import { movementVelocity } from '../input/movement'
-import { ApproachDialogue, canInteract, CHALLENGER, CHALLENGERS } from '../maps/interactions'
+import { ApproachDialogue, canDetectChallenger, canInteract, CHALLENGER, CHALLENGERS, type Facing } from '../maps/interactions'
 import { PlayerCards } from '../ui/PlayerCards'
 import { afterDuelDialogue } from '../maps/challengerDialogue'
 import { WorldHud } from '../ui/WorldHud'
@@ -23,7 +23,8 @@ export class WorldScene extends Phaser.Scene {
   private doors: { key: string; x: number; y: number }[] = []
   private appearanceId?: string
   private activeChallenger = CHALLENGER
-  private npcs: { content: typeof CHALLENGER | typeof RESIDENTS[number]; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody; approach: ApproachDialogue }[] = []
+  private npcs: { content: typeof CHALLENGER | typeof RESIDENTS[number]; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody; approach: ApproachDialogue; moving: boolean; facing: Facing }[] = []
+  private encounterLocked = false
   private choosing = false
   private readonly duelCommand = new DuelCommand()
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -74,7 +75,8 @@ export class WorldScene extends Phaser.Scene {
       const visible = content.kind === 'resident'
       sprite.setVisible(visible).setActive(visible)
       sprite.body.enable = visible
-      return { content, sprite, approach: new ApproachDialogue() }
+      return { content, sprite, approach: new ApproachDialogue(), moving: false,
+        facing: content.kind === 'challenger' ? content.facing : 'down' }
     })
     this.challenger = this.npcs[0]!.sprite
     this.activeChallenger = CHALLENGER
@@ -114,6 +116,7 @@ export class WorldScene extends Phaser.Scene {
     this.cursors = keyboard.createCursorKeys()
     this.keys = keyboard.addKeys('W,A,S,D,E,T,ENTER,ESC') as typeof this.keys
     this.choosing = false
+    this.encounterLocked = false
     this.hud = new WorldHud(this, () => { void this.choosePlayer() })
     const team = button(document.getElementById('game')!, 'Equipe · T', () => this.openTeam())
     team.className = 'world-team-button'
@@ -140,7 +143,7 @@ export class WorldScene extends Phaser.Scene {
         if (npc.content.kind !== 'challenger') continue
         const visible = !owned.has(npc.content.playerDefinitionId)
         npc.sprite.setVisible(visible).setActive(visible)
-        npc.sprite.body.enable = visible
+        npc.sprite.body.enable = visible && !npc.moving
         if (!visible && npc.content.id === this.activeChallenger.id) this.hud.closeDialogue()
       }
     }
@@ -183,6 +186,7 @@ export class WorldScene extends Phaser.Scene {
 
   update(): void {
     if (this.choosing) return
+    if (this.encounterLocked) { this.player.setVelocity(0, 0); return }
     if (Phaser.Input.Keyboard.JustDown(this.keys.T)) { this.openTeam(); return }
     // Consume both keys each frame so simultaneous presses cannot reopen a dialogue.
     const interact = Phaser.Input.Keyboard.JustDown(this.keys.E)
@@ -192,15 +196,19 @@ export class WorldScene extends Phaser.Scene {
     if (!this.hud.isDialogueOpen && (interact || enter) && nearbyDoor) { this.enterInterior(nearbyDoor.key); return }
     const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC)
     const nearbyNpc = this.npcs.find(npc => npc.sprite.active && canInteract(this.player.body.center, npc.sprite.body.center))
-    let greet = false
     for (const npc of this.npcs) {
-      if (npc.content.kind === 'challenger' && npc.sprite.active && npc.approach.update(this.player.body.center, npc.sprite.body.center) && npc === nearbyNpc) greet = true
+      if (npc.content.kind === 'challenger' && npc.sprite.active && !this.encounterLocked &&
+          npc.approach.update(this.player.body.center, npc.sprite.body.center, npc.facing)) {
+        this.beginChallengerApproach(npc)
+        return
+      }
     }
     const nearby = nearbyNpc !== undefined
     if (this.hud.isDialogueOpen) {
       if (enter && this.hud.canChallenge) { void this.choosePlayer(); return }
       if (interact || enter || escape) this.hud.closeDialogue()
-    } else if (greet || ((interact || enter) && nearby)) {
+    } else if ((interact || enter) && nearby &&
+      (nearbyNpc!.content.kind === 'resident' || canDetectChallenger(this.player.body.center, nearbyNpc!.sprite.body.center, nearbyNpc!.facing))) {
       const content = nearbyNpc!.content
       if (content.kind === 'challenger') this.activeChallenger = content
       this.hud.openDialogue(content.name, content.dialogue, false, content.kind)
@@ -210,11 +218,71 @@ export class WorldScene extends Phaser.Scene {
       right: this.cursors.right.isDown || this.keys.D.isDown,
       up: this.cursors.up.isDown || this.keys.W.isDown,
       down: this.cursors.down.isDown || this.keys.S.isDown,
-    }, this.hud.isDialogueOpen)
+    }, this.hud.isDialogueOpen || this.encounterLocked)
     this.player.setVelocity(velocity.x, velocity.y)
     this.player.setDepth(this.player.y)
     this.challenger.setDepth(this.challenger.y)
     this.hud.showPrompt(nearby || Boolean(nearbyDoor), nearbyDoor ? 'Entrar' : 'Conversar')
+  }
+
+  private beginChallengerApproach(npc: typeof this.npcs[number]): void {
+    this.encounterLocked = true
+    npc.moving = true
+    npc.sprite.body.enable = false
+    this.player.setVelocity(0, 0)
+    this.walkAnimation.stop()
+    this.input.keyboard!.resetKeys()
+    this.hud.showPrompt(false)
+    this.activeChallenger = npc.content as typeof CHALLENGER
+    const dx = this.player.x - npc.sprite.x
+    const dy = this.player.y - npc.sprite.y
+    const length = Math.max(1, Math.hypot(dx, dy))
+    const stopDistance = 36
+    const targetX = this.player.x - dx / length * stopDistance
+    const targetY = this.player.y - dy / length * stopDistance
+    this.tweens.killTweensOf(npc.sprite)
+    const alert = this.add.text(npc.sprite.x, npc.sprite.y - 38, '!', {
+      fontFamily: 'monospace', fontSize: '24px', color: '#f7d154',
+    }).setOrigin(0.5).setDepth(1000)
+    this.tweens.add({ targets: alert, y: alert.y - 10, alpha: 0, duration: 650,
+      onComplete: () => alert.destroy() })
+    this.tweens.add({ targets: npc.sprite, x: targetX, y: targetY,
+      duration: 850, ease: 'Linear',
+      onUpdate: tween => {
+        // Small alternating steps keep the upright placeholder visibly walking.
+        npc.sprite.y -= Math.round(2 * Math.abs(Math.sin(tween.progress * Math.PI * 6)))
+        npc.sprite.setDepth(npc.sprite.y)
+      },
+      onComplete: () => {
+        if (!this.scene.isActive() || !npc.sprite.active) return
+        npc.sprite.setPosition(targetX, targetY)
+        npc.sprite.refreshBody()
+        npc.sprite.body.enable = true
+        npc.sprite.setDepth(npc.sprite.y)
+        npc.moving = false
+        npc.facing = this.facingToward(npc.sprite, this.player)
+        this.faceSprite(npc.sprite, npc.facing)
+        this.facePlayer(this.facingToward(this.player, npc.sprite))
+        this.encounterLocked = false
+        this.input.keyboard!.resetKeys()
+        this.hud.openDialogue(npc.content.name, npc.content.dialogue)
+      },
+    })
+  }
+
+  private facingToward(from: { x: number; y: number }, to: { x: number; y: number }): Facing {
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down')
+  }
+
+  private faceSprite(sprite: Phaser.GameObjects.Image, facing: Facing): void {
+    sprite.setData('facing', facing)
+    sprite.setFlipX(facing === 'left')
+  }
+
+  private facePlayer(facing: Facing): void {
+    this.walkAnimation.face(facing)
   }
 
   private async choosePlayer(): Promise<void> {
@@ -269,8 +337,7 @@ export class WorldScene extends Phaser.Scene {
           void this.duelCommand.play(challenger.id, selectedId).then(result => {
             if (!this.scene.isActive()) return
             close()
-            this.scene.sleep()
-            this.scene.run('MatchScene', result)
+            this.transitionToMatch(result)
           }).catch((error: unknown) => {
             if (error instanceof ApiError && error.rejected) {
               status.textContent = error.code === 'PROFILE_NOT_FOUND'
@@ -295,6 +362,21 @@ export class WorldScene extends Phaser.Scene {
     await load()
   }
 
+  private transitionToMatch(result: DuelResponse): void {
+    const curtain = document.createElement('div')
+    curtain.className = 'scene-transition scene-transition-close'
+    curtain.setAttribute('aria-hidden', 'true')
+    document.getElementById('game')!.append(curtain)
+    window.setTimeout(() => {
+      if (!this.scene.isActive()) { curtain.remove(); return }
+      this.scene.sleep()
+      this.scene.run('MatchScene', result)
+      curtain.classList.remove('scene-transition-close')
+      curtain.classList.add('scene-transition-open')
+      window.setTimeout(() => curtain.remove(), 240)
+    }, 240)
+  }
+
   private openStadium(): void {
     if (this.choosing || !this.scene.isActive() || !canInteract(this.player.body.center, this.stadiumPoint)) return
     // Stable content ID fallback permits recovery when the state request failed.
@@ -315,7 +397,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private openTeam(): void {
-    if (this.choosing || !this.scene.isActive()) return
+    if (this.choosing || this.encounterLocked || !this.scene.isActive()) return
     this.input.keyboard!.resetKeys()
     this.player.setVelocity(0, 0)
     this.walkAnimation.stop()

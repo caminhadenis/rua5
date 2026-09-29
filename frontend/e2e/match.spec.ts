@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
+import type { DuelResponse, MatchEvent, RosterPlayer } from '../src/api/gameApi'
 
 async function dialogueState(page: Page) {
   return page.evaluate(async () => {
@@ -50,6 +50,7 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   const response = await resultPromise
   expect(response.ok()).toBe(true)
   const result = await response.json() as DuelResponse
+  await expect(page.locator('.scene-transition')).toHaveCount(1)
   await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
   await expect(page.getByTestId('current-event')).toHaveAttribute('data-sequence', /[1-9]/)
   const visible = await page.evaluate(() => ({
@@ -239,15 +240,78 @@ test('goal raises the scorer arms, holds the caption and shows winner and loser 
   await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
   await page.getByRole('button', { name: 'Iniciar desafio' }).click()
   await page.getByRole('button', { name: 'Acelerar · 1×' }).click()
+  await expect.poll(() => page.locator('.duel-ball').getAttribute('data-shot'), { intervals: [20] }).toBe('home')
+  expect(await page.getByTestId('current-event').textContent()).not.toContain('GOL!')
+  await expect(page.getByTestId('home-score')).toHaveText('0')
+  await expect.poll(() => page.locator('.duel-ball').evaluate(ball => getComputedStyle(ball).animationName)).toBe('shot-home')
   await expect(page.getByTestId('current-event')).toContainText('GOL!')
-  await page.getByRole('button', { name: 'Acelerar · 4×' }).click()
+  await expect(page.getByTestId('home-score')).toHaveText('1')
   await expect(page.locator('.duelist.home')).toHaveAttribute('data-emotion', 'happy')
   await expect(page.locator('.duelist.away')).toHaveAttribute('data-emotion', 'neutral')
-  await page.waitForTimeout(700)
-  await expect(page.getByTestId('current-event')).toContainText('GOL!')
   await page.screenshot({ path: testInfo.outputPath('goal-celebration.png') })
   await page.getByRole('button', { name: 'Pular', exact: true }).click()
   await expect(page.locator('.duelist.home')).toHaveAttribute('data-emotion', 'happy')
   await expect(page.locator('.duelist.away')).toHaveAttribute('data-emotion', 'sad')
   await page.screenshot({ path: testInfo.outputPath('winner-and-loser.png') })
+})
+
+test('both teams shoot into their net and a missed shot stays outside', async ({ page }) => {
+  await page.request.post('/api/v1/profiles', { data: { displayName: 'Gols dos dois lados' } })
+  await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
+  await page.goto('/')
+  await walkToNpc(page)
+  const events: MatchEvent[] = [
+    { sequence: 1, minute: 1, type: 'GOAL', side: 'HOME', actorPlayerId: 'home', homeScore: 1, awayScore: 0 },
+    { sequence: 2, minute: 2, type: 'GOAL', side: 'AWAY', actorPlayerId: 'away', homeScore: 1, awayScore: 1 },
+    { sequence: 3, minute: 3, type: 'SHOT_MISSED', side: 'HOME', actorPlayerId: 'home', homeScore: 1, awayScore: 1 },
+  ]
+  const result: DuelResponse = {
+    match: { id: 'both-goals', home: [{ playerId: 'home', name: 'Cabeleira', level: 1 }],
+      away: [{ playerId: 'away', name: 'Nilo', level: 1 }], homeScore: 1, awayScore: 1,
+      outcome: 'DRAW', events }, rewards: null,
+  }
+  await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
+  await page.getByRole('button', { name: 'Iniciar desafio' }).click()
+  await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
+  const show = async (event: MatchEvent) => page.evaluate(async shot => {
+    const { game } = await import('/src/main.ts')
+    const scene = game.scene.getScene('MatchScene') as unknown as { showEvents: (events: MatchEvent[]) => void }
+    scene.showEvents([shot])
+  }, event)
+  await show(events[0]!)
+  expect(await page.getByTestId('current-event').textContent()).not.toContain('GOL!')
+  await expect(page.getByTestId('home-score')).toHaveText('0')
+  await expect(page.getByTestId('current-event')).toContainText('GOL!')
+  await expect(page.getByTestId('home-score')).toHaveText('1')
+  const homeInNet = await page.evaluate(() => {
+    const ball = document.querySelector('.duel-ball')!.getBoundingClientRect()
+    const net = document.querySelector('.duel-goal.goal-home')!.getBoundingClientRect()
+    return { inside: ball.left >= net.left && ball.right <= net.right && ball.top >= net.top && ball.bottom <= net.bottom,
+      width: net.width, mesh: getComputedStyle(document.querySelector('.duel-goal.goal-home')!).backgroundImage }
+  })
+  expect(homeInNet.inside).toBe(true)
+  expect(homeInNet.width).toBeGreaterThan(30)
+  expect(homeInNet.mesh).toContain('linear-gradient')
+  await show(events[1]!)
+  expect(await page.getByTestId('current-event').textContent()).not.toContain('GOL!')
+  await expect(page.getByTestId('away-score')).toHaveText('0')
+  await expect(page.getByTestId('current-event')).toContainText('Nilo marcou um GOL!')
+  await expect(page.getByTestId('away-score')).toHaveText('1')
+  const awayInNet = await page.evaluate(() => {
+    const ball = document.querySelector('.duel-ball')!.getBoundingClientRect()
+    const net = document.querySelector('.duel-goal.goal-away')!.getBoundingClientRect()
+    return ball.left >= net.left && ball.right <= net.right && ball.top >= net.top && ball.bottom <= net.bottom
+  })
+  expect(awayInNet).toBe(true)
+  await show(events[2]!)
+  await page.waitForTimeout(600)
+  await expect(page.getByTestId('current-event')).toContainText('fora!')
+  await expect(page.getByTestId('home-score')).toHaveText('1')
+  await expect(page.getByTestId('away-score')).toHaveText('1')
+  const missedNet = await page.evaluate(() => {
+    const ball = document.querySelector('.duel-ball')!.getBoundingClientRect()
+    const net = document.querySelector('.duel-goal.goal-home')!.getBoundingClientRect()
+    return ball.bottom < net.top
+  })
+  expect(missedNet).toBe(true)
 })

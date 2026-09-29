@@ -54,7 +54,7 @@ export class TeamScene extends Phaser.Scene {
   }
 
   private back(): void {
-    if (this.busy || this.pendingSave) return
+    if (this.busy) return
     this.scene.wake('WorldScene')
     this.scene.stop()
   }
@@ -159,8 +159,10 @@ export class TeamScene extends Phaser.Scene {
       const count = this.slots.filter(Boolean).length
       state.textContent = `${count} / 5 escalados · ${dirty() ? 'Alterações ainda não salvas' : 'Escalação salva'}`
       save.disabled = this.busy || !dirty()
-      back.disabled = frozen
-      back.textContent = dirty() ? 'Voltar sem salvar' : 'Voltar ao bairro'
+      // An uncertain save keeps the selection frozen for an idempotent retry,
+      // but leaving is safe: reopening this scene reloads the server's lineup.
+      back.disabled = this.busy
+      back.textContent = dirty() && !this.pendingSave ? 'Voltar sem salvar' : 'Voltar ao bairro'
       cards.disabled = frozen
     }
     const persist = async () => {

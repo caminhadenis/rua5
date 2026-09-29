@@ -21,6 +21,9 @@ async function worldState(page: Page) {
       left: scene.player.body.left as number,
       right: scene.player.body.right as number,
       npcLeft: scene.challenger.body.left as number,
+      npcX: scene.challenger.x as number,
+      npcAngle: scene.challenger.angle as number,
+      approaching: scene.encounterLocked as boolean,
       scrollX: scene.cameras.main.scrollX as number,
       scrollY: scene.cameras.main.scrollY as number,
       dialogue: scene.hud.isDialogueOpen as boolean,
@@ -32,7 +35,7 @@ async function worldState(page: Page) {
   })
 }
 
-test('open map, walk, collide, follow camera and talk to the challenger', async ({ page }, testInfo) => {
+test('open map, walk, collide, follow camera and meet the challenger', async ({ page }, testInfo) => {
   const errors: string[] = []
   const commands: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -68,8 +71,21 @@ test('open map, walk, collide, follow camera and talk to the challenger', async 
   }
   expect(Math.abs((await worldState(page))!.y - 400)).toBeLessThanOrEqual(5)
   await page.keyboard.down('d')
+  await expect.poll(async () => (await worldState(page))!.approaching, { timeout: 7000, intervals: [20] }).toBe(true)
+  const detected = (await worldState(page))!
+  expect(detected.dialogue).toBe(false)
+  expect(detected.npcAngle).toBe(0)
+  await page.keyboard.press('e', { delay: 40 })
+  expect((await worldState(page))!.dialogue).toBe(false)
+  await page.waitForTimeout(280)
+  const walking = (await worldState(page))!
+  expect(walking.x).toBe(detected.x)
+  expect(walking.npcX).toBeLessThan(detected.npcX - 4)
+  expect(walking.dialogue).toBe(false)
+  await page.screenshot({ path: testInfo.outputPath('npc-approaching.png') })
   await expect.poll(async () => (await worldState(page))!.dialogue, { timeout: 7000, intervals: [20] }).toBe(true)
   await page.keyboard.up('d')
+  expect((await worldState(page))!.npcAngle).toBe(0)
   expect((await worldState(page))!.scrollX).toBeGreaterThan(200)
 
   // Simply approaching Nilo opens his speech; no interaction key or API command.
@@ -84,7 +100,7 @@ test('open map, walk, collide, follow camera and talk to the challenger', async 
   await page.keyboard.press('Escape', { delay: 80 })
   await expect.poll(async () => (await worldState(page))!.dialogue).toBe(false)
 
-  // The visible NPC is solid, and can be interacted with again after closing.
+  // The NPC becomes solid again after stopping a safe distance from the player.
   await page.keyboard.down('ArrowRight')
   await page.waitForTimeout(500)
   await page.keyboard.up('ArrowRight')
@@ -97,14 +113,16 @@ test('open map, walk, collide, follow camera and talk to the challenger', async 
   await page.keyboard.up('e')
   await page.keyboard.press('e', { delay: 80 })
   await expect.poll(async () => (await worldState(page))!.dialogue).toBe(false)
-  await page.waitForTimeout(150)
-  expect((await worldState(page))!.dialogue).toBe(false)
   await page.keyboard.down('ArrowLeft')
-  await expect.poll(async () => (await worldState(page))!.x).toBeLessThan(710)
+  await expect.poll(async () => (await worldState(page))!.x).toBeLessThan(700)
   await page.keyboard.up('ArrowLeft')
   await page.keyboard.down('ArrowRight')
   await expect.poll(async () => (await worldState(page))!.dialogue).toBe(true)
   await page.keyboard.up('ArrowRight')
+  await page.keyboard.press('Escape', { delay: 80 })
+  await expect.poll(async () => (await worldState(page))!.dialogue).toBe(false)
+  await page.waitForTimeout(150)
+  expect((await worldState(page))!.dialogue).toBe(false)
   await page.screenshot({ path: testInfo.outputPath('neighborhood.png') })
   expect(commands).toEqual([])
   expect(errors).toEqual([])

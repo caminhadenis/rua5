@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { gameAudio } from '../audio/GameAudio'
 import { ApiError, StadiumCommand, stadiumApi, teamApi, type MatchEvent, type Participant, type StadiumResponse } from '../../api/gameApi'
 import { Playback, presentEvent } from '../match/Playback'
+import { onGoalArrival } from '../match/goalArrival'
 import { actingPosition, coachGreeting, coachVerdict, pitchPosition } from '../match/stadiumPresentation'
 import { originalUniformUrls, uniformUrl } from '../team/teamColors'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
@@ -17,8 +18,13 @@ export class StadiumScene extends Phaser.Scene {
   private clock?: HTMLElement
   private progress?: HTMLProgressElement
   private pitch?: HTMLElement
+  private pendingGoal?: () => void
   constructor() { super('StadiumScene') }
-  init(data: { id: string }): void { this.id = data.id; this.playback = undefined; this.result = undefined }
+  init(data: { id: string }): void {
+    this.pendingGoal?.()
+    this.pendingGoal = undefined
+    this.id = data.id; this.playback = undefined; this.result = undefined
+  }
   create(): void {
     this.panel = scenePanel(this, 'Estádio')
     this.panel.classList.add('stadium-panel')
@@ -119,7 +125,7 @@ export class StadiumScene extends Phaser.Scene {
     this.pitch.className = 'stadium-pitch'
     this.pitch.setAttribute('role', 'img')
     this.pitch.setAttribute('aria-label', `Quadra com ${match.home.map(p => p.name).join(', ')} contra ${match.away.map(p => p.name).join(', ')}`)
-    this.pitch.innerHTML = '<div class="stadium-field-lines" aria-hidden="true"></div><div class="stadium-center-circle" aria-hidden="true"></div><div class="stadium-ball" aria-hidden="true"></div>'
+    this.pitch.innerHTML = '<div class="stadium-field-lines" aria-hidden="true"></div><div class="stadium-center-circle" aria-hidden="true"></div><div class="stadium-goal goal-home" aria-hidden="true"></div><div class="stadium-goal goal-away" aria-hidden="true"></div><div class="stadium-ball" aria-hidden="true"></div>'
     for (const side of ['HOME', 'AWAY'] as const) {
       const players = side === 'HOME' ? match.home : match.away
       players.forEach((player, index) => {
@@ -170,13 +176,10 @@ export class StadiumScene extends Phaser.Scene {
     if (this.playback.complete) this.finish()
   }
   private showEvent(event: MatchEvent): void {
-    if (event.type === 'GOAL') gameAudio.play('goal')
-    this.score!.textContent = `${event.homeScore} × ${event.awayScore}`
-    if (event.metadata?.homePenalties !== undefined) this.score!.textContent += ` · Pênaltis ${event.metadata.homePenalties} × ${event.metadata.awayPenalties}`
-    this.event!.textContent = presentEvent(event, [...this.result!.match.home, ...this.result!.match.away])
-    this.clock!.textContent = `${event.minute}' · ${event.type.startsWith('PENALTY') ? 'PÊNALTIS' : 'EM JOGO'}`
-    this.progress!.value = event.sequence / this.result!.match.events.length * 100
+    this.pendingGoal?.()
+    this.pendingGoal = undefined
     const participants: Participant[] = [...this.result!.match.home, ...this.result!.match.away]
+    this.clock!.textContent = `${event.minute}' · ${event.type.startsWith('PENALTY') ? 'PÊNALTIS' : 'EM JOGO'}`
     const acting = actingPosition(event, participants)
     this.pitch!.querySelectorAll<HTMLElement>('.stadium-athlete').forEach(athlete => {
       const active = athlete.dataset.playerId === event.actorPlayerId
@@ -192,9 +195,28 @@ export class StadiumScene extends Phaser.Scene {
     })
     const ball = this.pitch!.querySelector<HTMLElement>('.stadium-ball')!
     if (acting) { ball.style.left = `${acting.x}%`; ball.style.top = `${acting.y}%` }
-    this.pitch!.classList.toggle('is-goal', event.type === 'GOAL' || event.type === 'PENALTY_GOAL')
+    ball.dataset.shot = event.type === 'GOAL' ? event.side.toLowerCase() :
+      event.type === 'SHOT_MISSED' ? `${event.side.toLowerCase()}-miss` :
+        event.type === 'SAVE' ? `${event.side.toLowerCase()}-save` : 'reset'
+    ball.dataset.sequence = String(event.sequence)
+    this.pitch!.classList.remove('is-goal')
+    const reveal = () => {
+      if (!this.scene.isActive() || !this.playback) return
+      this.score!.textContent = `${event.homeScore} × ${event.awayScore}`
+      if (event.metadata?.homePenalties !== undefined) this.score!.textContent += ` · Pênaltis ${event.metadata.homePenalties} × ${event.metadata.awayPenalties}`
+      this.event!.textContent = presentEvent(event, participants)
+      this.progress!.value = event.sequence / this.result!.match.events.length * 100
+      this.pitch!.classList.toggle('is-goal', event.type === 'GOAL' || event.type === 'PENALTY_GOAL')
+      if (event.type === 'GOAL') gameAudio.play('goal')
+    }
+    if (event.type === 'GOAL') {
+      this.event!.textContent = presentEvent({ ...event, type: 'SHOT' }, participants)
+      this.pendingGoal = onGoalArrival(ball, reveal)
+    } else reveal()
   }
   private finish(): void {
+    this.pendingGoal?.()
+    this.pendingGoal = undefined
     this.playback = undefined
     if (this.result!.match.outcome === 'WIN') gameAudio.play('win')
     const { match, rewards } = this.result!
