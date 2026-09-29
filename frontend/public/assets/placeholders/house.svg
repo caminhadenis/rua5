@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="80" viewBox="0 0 96 80" shape-rendering="crispEdges">
+  <!-- Original neighborhood house, exterior only. -->
+  <path fill="#b88261" d="M0 0h96v80H0z"/>
+  <path fill="#ead3a1" d="M4 34h88v44H4z"/>
+  <path fill="#874d40" d="M0 0h96v38H0z"/>
+  <path fill="#ba6951" d="M2 2h92v7H2zM2 12h92v7H2zM2 22h92v7H2z"/>
+  <path fill="#d38762" d="M8 2h2v7H8zM32 2h2v7h-2zM56 2h2v7h-2zM80 2h2v7h-2zM20 12h2v7h-2zM44 12h2v7h-2zM68 12h2v7h-2zM8 22h2v7H8zM32 22h2v7h-2zM56 22h2v7h-2zM80 22h2v7h-2z"/>
+  <path fill="#57483e" d="M38 45h20v35H38zM10 44h20v19H10zM66 44h20v19H66z"/>
+  <path fill="#87babc" d="M12 46h16v15H12zM68 46h16v15H68z"/>
+  <path fill="#fff0c7" d="M19 46h2v15h-2zM12 52h16v2H12zM75 46h2v15h-2zM68 52h16v2H68z"/>
+  <path fill="#ad7857" d="M41 48h14v30H41z"/>
+  <path fill="#f7d154" d="M51 63h2v3h-2z"/>
+  <path fill="#789d68" d="M8 70h20v8H8zM68 70h20v8H68z"/>
+  <path fill="#de725a" d="M11 70h3v3h-3zM22 73h3v3h-3zM71 72h3v3h-3zM81 70h3v3h-3z"/>
+</svg>

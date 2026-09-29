@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="32" viewBox="0 0 160 32" shape-rendering="crispEdges">
+  <!-- Original 32px tiles: grass, paving, court, masonry, hedge. -->
+  <path fill="#789d68" d="M0 0h32v32H0z"/>
+  <path fill="#65875a" d="M5 8h2v4H5zM7 10h3v2H7zM23 22h2v4h-2zM25 24h3v2h-3z"/>
+  <path fill="#c2b391" d="M32 0h32v32H32z"/>
+  <path fill="#b4a582" d="M32 0h32v2H32zM32 16h32v1H32zM47 0h1v16h-1zM38 17h1v15h-1zM58 17h1v15h-1z"/>
+  <path fill="#527e80" d="M64 0h32v32H64z"/>
+  <path fill="#4b7577" d="M66 5h2v2h-2zM86 25h3v1h-3z"/>
+  <path fill="#b86b50" d="M96 0h32v32H96z"/>
+  <path fill="#874d40" d="M96 0h32v3H96zM96 15h32v3H96zM96 29h32v3H96zM110 0h3v16h-3zM99 16h3v14h-3zM123 16h3v14h-3z"/>
+  <path fill="#345c4a" d="M128 0h32v32h-32z"/>
+  <path fill="#477552" d="M131 3h10v10h-10zM146 8h10v12h-10zM133 20h12v9h-12z"/>
+  <path fill="#5a865c" d="M133 4h6v3h-6zM148 9h6v3h-6zM135 21h6v3h-6z"/>
+</svg>

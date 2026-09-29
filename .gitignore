@@ -1,0 +1,17 @@
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+backend/.gradle/
+backend/.kotlin/
+backend/build/
+
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/*.tsbuildinfo
+
+.env

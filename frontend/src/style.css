@@ -1,0 +1,362 @@
+:root {
+  color: #d8e4ec;
+  background: #0b1017;
+  font-family: monospace;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#game {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+canvas {
+  image-rendering: pixelated;
+}
+
+.scene-panel {
+  position: absolute;
+  inset: 4% max(4%, calc((100% - 880px) / 2));
+  z-index: 10;
+  background: #152b32;
+  border: 3px solid #f7d154;
+  padding: 16px 24px;
+  overflow: auto;
+  font-size: 18px;
+}
+.scene-panel p { margin: 8px 0 12px; }
+button, input, select {
+  font: inherit;
+  padding: 10px 14px;
+  margin: 6px;
+  color: #152b32;
+  background: #f5ead2;
+  border: 2px solid #f7d154;
+}
+button { cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: wait; }
+button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
+
+/* Duel: restrained handheld-RPG framing, with the scoreboard as the focal point. */
+.duel-panel {
+  background: #14252c;
+  border-color: #b4c3aa;
+  box-shadow: inset 0 0 0 4px #243c40, 0 8px 0 #080f16;
+  padding: 18px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.duel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; letter-spacing: 2px; color: #a6bcac; }
+.duel-badge { color: #f7d154; border: 1px solid #68755a; padding: 6px 8px; white-space: nowrap; letter-spacing: 1px; }
+.duel-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 8px 0; }
+.duel-player { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.duel-player small { font-size: 10px; letter-spacing: 2px; color: #a7b6b5; }
+.duel-player strong { font-size: clamp(18px, 3vw, 28px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel-player > span { font-size: 13px; color: #b8c5b7; }
+.duel-player.home { color: #f7d154; }
+.duel-player.away { text-align: right; color: #f3987b; }
+.duel-score { display: flex; align-items: center; justify-content: center; gap: 16px; background: #0c171f; padding: 6px 22px; border: 2px solid #52665e; box-shadow: 0 4px 0 #080f16; font-size: clamp(40px, 7vw, 64px); font-weight: bold; font-variant-numeric: tabular-nums; color: #fff4ce; }
+.score-divider { color: #68817a; font-size: 24px; }
+.duel-arena { position: relative; flex: 1; min-height: 120px; max-height: 260px; overflow: hidden; border: 2px solid #426454; background: repeating-linear-gradient(0deg, #25493d 0 32px, #294e41 32px 64px); }
+.court-lines { position: absolute; inset: 12px; border: 2px solid #95a97a55; }
+.court-lines::before { content: ''; position: absolute; left: 50%; height: 100%; border-left: 2px solid #95a97a55; }
+.court-circle { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; transform: translate(-50%, -50%); border: 2px solid #95a97a55; border-radius: 50%; }
+.duel-versus { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; font-weight: bold; color: #a4b393; }
+.duelist { position: absolute; width: 90px; height: 96px; top: 50%; transform: translate(-50%, -50%); }
+.duelist.home { left: 24%; }
+.duelist.away { left: 76%; }
+.duel-sprite { position: absolute; bottom: 8px; left: 13px; width: 64px; height: 80px; background-repeat: no-repeat; image-rendering: pixelated; z-index: 1; transition: translate 160ms steps(2); }
+.home .duel-sprite { background-size: 256px 240px; background-position: 0 -80px; }
+.away .duel-sprite { background-size: 64px 80px; }
+.duel-platform { position: absolute; bottom: 0; width: 90px; height: 20px; border: 2px solid #91a98b; background: #132e2ba8; border-radius: 50%; }
+.home.is-active .duel-platform { border-color: #f7d154; }
+.away.is-active .duel-platform { border-color: #f3987b; }
+.duelist.is-active .duel-sprite { translate: 0 -4px; }
+.duel-ball { position: absolute; top: 65%; left: 49%; width: 12px; height: 12px; background: #fff4ce; border: 3px solid #14252c; box-shadow: 2px 2px 0 #132a23; transition: left 220ms steps(4); }
+[data-side="home"] .duel-ball { left: 32%; }
+[data-side="away"] .duel-ball { left: 66%; }
+.duel-time { display: flex; align-items: center; gap: 12px; color: #a6bcac; font-size: 11px; letter-spacing: 1px; }
+.duel-time > span:first-child { min-width: 110px; }
+.duel-time progress { flex: 1; min-width: 0; height: 5px; border: 0; appearance: none; background: #2a4244; }
+.duel-time progress::-webkit-progress-bar { background: #2a4244; }
+.duel-time progress::-webkit-progress-value { background: #b2bc89; }
+.duel-time progress::-moz-progress-bar { background: #b2bc89; }
+.duel-commentary { display: flex; align-items: center; gap: 12px; padding: 14px; border: 2px solid #6c8276; background: #0c171f; min-width: 0; }
+.commentary-marker { color: #f7d154; font-size: 12px; }
+.duel-commentary p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(12px, 2vw, 18px); line-height: 1.4; }
+.is-goal .duel-commentary, .is-goal .duel-score { border-color: #f7d154; color: #f7d154; }
+.duel-controls { text-align: center; }
+.duel-controls button { font-size: 14px; margin: 0 6px; padding: 9px 14px; background: #253c3e; color: #f5ead2; border-color: #8eaa94; box-shadow: 0 3px 0 #08151b; }
+.duel-controls button:hover { background: #355052; border-color: #f7d154; }
+.duel-controls p:empty { display: none; }
+.duel-controls p { margin: 0 0 6px; }
+.duel-reward, .level-up { color: #f7d154; font-size: 15px; }
+.duel-history { color: #a6bcac; font-size: 12px; }
+.is-finished .duel-arena { min-height: 100px; }
+@media (max-width: 600px) {
+  .duel-panel { inset: 2%; padding: 14px 12px; gap: 12px; }
+  .duel-heading { font-size: 9px; letter-spacing: 0; }
+  .duel-scoreboard { gap: 8px; }
+  .duel-score { gap: 8px; padding: 4px 10px; }
+  .duel-player small { font-size: 8px; letter-spacing: 0; }
+  .duel-commentary { gap: 6px; padding: 10px 8px; }
+  .duel-reward { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .duel-sprite, .duel-ball { transition: none; }
+}
+.duelist[data-emotion="happy"] .duel-sprite,
+.duelist[data-emotion="sad"] .duel-sprite { background-size: 128px 160px; }
+.duelist.home[data-emotion="happy"] .duel-sprite { background-position: 0 0; }
+.duelist.away[data-emotion="happy"] .duel-sprite { background-position: 0 -80px; }
+.duelist.home[data-emotion="sad"] .duel-sprite { background-position: -64px 0; }
+.duelist.away[data-emotion="sad"] .duel-sprite { background-position: -64px -80px; translate: 0 2px; }
+.duelist[data-emotion="happy"] .duel-sprite { animation: goal-celebration 650ms steps(3) 2; }
+.duelist[data-emotion="happy"] .duel-platform { border-color: #f7d154; }
+.duelist[data-emotion="sad"] .duel-platform { border-color: #68817a; }
+@keyframes goal-celebration { 0%, 100% { translate: 0 0; } 50% { translate: 0 -7px; } }
+@media (prefers-reduced-motion: reduce) {
+  .duelist[data-emotion="happy"] .duel-sprite { animation: none; }
+}
+
+.player-selection-panel { border-color: #b4c3aa; background: #14252c; box-shadow: inset 0 0 0 4px #243c40, 0 8px 0 #080f16; padding: 24px 28px; }
+.player-selection-panel .selection-eyebrow { color: #a6bcac; font-size: 12px; letter-spacing: 2px; margin: 0 0 12px; }
+.player-selection-panel h2 { color: #fff4ce; font-size: clamp(20px, 3vw, 26px); margin: 0 0 10px; }
+.player-selection-panel .selection-description { font-size: 15px; color: #baccc3; }
+.player-cards { padding: 0; margin: 20px 0; border: 0; min-width: 0; }
+.player-cards legend { color: #a6bcac; font-size: 12px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; }
+.player-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.player-card { position: relative; cursor: pointer; }
+.player-card input { position: absolute; opacity: 0; width: 1px; height: 1px; padding: 0; margin: 0; }
+.player-card-face { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 2px solid #50685f; background: #0c171f; padding: 12px; box-shadow: 0 4px 0 #08151b; }
+.player-card-marker { visibility: hidden; color: #f7d154; font-size: 10px; letter-spacing: 1px; }
+.player-card-portrait { width: 96px; height: 100px; position: relative; background: linear-gradient(transparent 80%, #2a4b3f 80%); }
+.player-card-sprite { position: absolute; width: 64px; height: 80px; left: 16px; bottom: 6px; background-repeat: no-repeat; background-size: 256px 240px; background-position: 0 0; image-rendering: pixelated; }
+.player-card-sprite[data-asset="challenger"] { background-size: 64px 80px; }
+.player-card-face strong { color: #fff4ce; font-size: 20px; max-width: 100%; overflow-wrap: anywhere; }
+.player-card-level { font-size: 14px; color: #d4dec4; }
+.player-card-xp { font-size: 12px; color: #a6bcac; }
+.player-card input:checked + .player-card-face { border-color: #f7d154; background: #233932; }
+.player-card input:checked + .player-card-face .player-card-marker { visibility: visible; }
+.player-card input:focus-visible + .player-card-face { outline: 3px solid #f5ead2; outline-offset: 3px; }
+.player-card:hover .player-card-face { border-color: #b4c3aa; }
+.player-cards:disabled .player-card { cursor: wait; opacity: 0.65; }
+.player-selection-panel .selection-hint { color: #a6bcac; font-size: 12px; line-height: 1.5; }
+.selection-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.selection-actions button { margin: 0; font-size: 15px; background: #253c3e; color: #f5ead2; border-color: #8eaa94; box-shadow: 0 3px 0 #08151b; }
+.selection-actions button:last-child { background: #f7d154; color: #14252c; border-color: #f7d154; }
+@media (max-width: 600px) {
+  .player-selection-panel { inset: 2%; padding: 20px 16px; }
+  .player-card-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+}
+
+.world-team-button { position: absolute; top: 12px; right: 16px; z-index: 5; background: #152b32; color: #f7d154; font-size: 15px; }
+.team-panel { inset: 3% max(3%, calc((100% - 1000px) / 2)); }
+.lineup-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 20px 0 10px; }
+.lineup-slot { border: 2px solid #52665e; background: #0c171f; padding: 8px; min-height: 96px; }
+.lineup-slot > button { width: 100%; margin: 0; padding: 8px 4px; font-size: 14px; color: #fff4ce; background: #253c3e; border: 0; min-height: 42px; }
+.lineup-slot > .remove-player { margin-top: 4px; font-size: 10px; color: #b8c5b7; background: transparent; }
+.team-panel [role="status"] { color: #f7d154; font-size: 13px; }
+.player-details { background: #0c171f; border-left: 3px solid #f7d154; padding: 12px; margin-bottom: 12px; font-size: 14px; }
+.player-details dl { display: grid; grid-template-columns: repeat(3, auto minmax(20px, 1fr)); gap: 8px 12px; margin: 0; }
+.player-details dd { margin: 0; color: #f7d154; }
+.recruitment-panel { border-top: 1px solid #52665e; margin-top: 16px; padding-top: 12px; font-size: 13px; color: #d4dec4; }
+.recruitment-panel button { font-size: 13px; padding: 8px 12px; margin: 4px 0; background: #253c3e; color: #f7d154; }
+.duel-controls .recruitment-panel { margin: 8px 0; padding-top: 8px; }
+@media (max-width: 600px) {
+  .lineup-slots { gap: 4px; }
+  .lineup-slot { padding: 3px; }
+  .lineup-slot > button { font-size: 11px; }
+  .player-details dl { grid-template-columns: repeat(2, auto minmax(20px, 1fr)); font-size: 12px; }
+}
+/* Keep the lineup reachable while browsing a roster with reserves. */
+.team-panel .lineup-slots { position: sticky; top: -24px; z-index: 2; background: #14252c; padding: 8px 0; }
+.team-panel .player-card-face { padding: 8px; gap: 4px; }
+.team-panel .player-card-marker { font-size: 8px; }
+.team-panel .player-card-portrait { width: 64px; height: 56px; }
+.team-panel .player-card-sprite { width: 32px; height: 40px; background-size: 128px 120px; }
+.team-panel .player-card-sprite[data-asset="challenger"] { background-size: 32px 40px; }
+.team-panel .player-card-face strong { font-size: 16px; }
+.team-panel .player-card-level, .team-panel .player-card-xp { font-size: 11px; }
+
+.stadium-panel { display: flex; flex-direction: column; gap: 10px; background: #14252c; border-color: #b4c3aa; box-shadow: inset 0 0 0 4px #243c40, 0 8px 0 #080f16; }
+.stadium-panel h2 { margin: 0; color: #fff4ce; }
+.stadium-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stadium-heading span { color: #f7d154; font-size: 12px; letter-spacing: 2px; }
+.coach-dialogue { display: flex; align-items: center; gap: 16px; padding: 14px; border: 2px solid #738b76; background: #0c171f; }
+.coach-portrait { flex: 0 0 64px; width: 64px; height: 80px; background-size: 64px 80px; background-repeat: no-repeat; image-rendering: pixelated; background-color: #25493d; border-bottom: 3px solid #f7d154; }
+.coach-lines { min-width: 0; line-height: 1.45; }
+.coach-lines strong { color: #f7d154; font-size: 15px; }
+.coach-lines p { margin: 6px 0 0; font-size: 16px; }
+.coach-next { align-self: flex-start; font-size: 13px; background: #253c3e; color: #f5ead2; }
+.stadium-opponents { font-size: 14px; color: #b8c5b7; }
+.stadium-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.stadium-actions button { margin: 0; font-size: 15px; background: #253c3e; color: #fff4ce; }
+.stadium-actions button:last-child { background: #f7d154; color: #14252c; }
+.stadium-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; text-align: center; color: #b8c5b7; font-size: 13px; }
+.stadium-scoreboard strong { display: block; min-width: 160px; padding: 4px 12px; border: 2px solid #52665e; background: #0c171f; color: #fff4ce; font-size: clamp(28px, 5vw, 48px); font-variant-numeric: tabular-nums; }
+.stadium-pitch { position: relative; flex: 1; min-height: 300px; max-height: 490px; overflow: hidden; border: 4px solid #b7c49b; background: repeating-linear-gradient(90deg, #244c3b 0 80px, #2a563f 80px 160px); }
+.stadium-field-lines { position: absolute; inset: 4%; border: 2px solid #c9d5a588; pointer-events: none; }
+.stadium-field-lines::before { content: ''; position: absolute; left: 50%; top: 0; height: 100%; border-left: 2px solid #c9d5a588; }
+.stadium-field-lines::after { content: ''; position: absolute; left: 0; top: 25%; width: 100%; height: 50%; border-top: 1px solid #c9d5a544; border-bottom: 1px solid #c9d5a544; }
+.stadium-center-circle { position: absolute; left: 50%; top: 50%; width: 100px; height: 100px; transform: translate(-50%, -50%); border: 2px solid #c9d5a588; border-radius: 50%; pointer-events: none; }
+.stadium-athlete { position: absolute; width: 72px; height: 92px; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transition: left 320ms steps(4), top 320ms steps(4); z-index: 2; }
+.stadium-athlete-sprite { display: block; width: 64px; height: 80px; flex: 0 0 80px; background-size: 256px 240px; background-position: 0 0; background-repeat: no-repeat; image-rendering: pixelated; filter: drop-shadow(2px 3px 0 #10261c); }
+.stadium-athlete-sprite[data-asset="challenger"] { background-size: 64px 80px; }
+.stadium-athlete-name { max-width: 88px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; background: #0b1b1bd9; color: #fff4ce; }
+.stadium-athlete.home .stadium-athlete-name { border-bottom: 2px solid #f7d154; }
+.stadium-athlete.away .stadium-athlete-name { border-bottom: 2px solid #f3987b; }
+.stadium-athlete.is-active { z-index: 4; }
+.stadium-athlete.is-active .stadium-athlete-sprite { translate: 0 -5px; filter: drop-shadow(0 0 5px #fff4ce); }
+.stadium-ball { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, 50%); background: #fff4ce; border: 3px solid #14252c; z-index: 5; transition: left 320ms steps(4), top 320ms steps(4); }
+.stadium-pitch.is-goal { border-color: #f7d154; }
+.stadium-timeline { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #b8c5b7; }
+.stadium-timeline span { min-width: 135px; }
+.stadium-timeline progress { flex: 1; height: 7px; accent-color: #f7d154; }
+.stadium-event { min-height: 48px; padding: 12px; border: 2px solid #738b76; background: #0c171f; font-size: 17px; }
+.stadium-final-score { font-size: 36px; text-align: center; color: #f7d154; }
+.stadium-trophy-award { display: flex; align-items: center; gap: 14px; padding: 12px; border: 2px solid #f7d154; background: #2b3527; color: #fff4ce; }
+.trophy-icon { font-size: 32px; }
+.stadium-awards { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: #b8c5b7; }
+.stadium-awards p { margin: 0; }
+.team-achievements { margin: 14px 0; padding: 12px; border: 2px solid #738b76; background: #0c171f; }
+.team-achievements h3 { margin: 0 0 6px; color: #f7d154; }
+.team-achievements p { font-size: 14px; color: #b8c5b7; }
+.achievement-trophy { display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid #f7d154; background: #263424; }
+.achievement-trophy > span { font-size: 30px; }
+.achievement-trophy div { display: flex; flex-direction: column; gap: 4px; }
+.achievement-trophy strong { color: #fff4ce; }
+.achievement-trophy small { color: #b8c5b7; }
+.training-panel { inset: 3% max(3%, calc((100% - 850px) / 2)); background: #14252c; }
+.training-panel h2 { margin: 0; color: #fff4ce; }
+.training-panel .player-cards { margin: 8px 0; }
+.training-panel .player-card-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.training-panel .player-card-face { padding: 5px; gap: 2px; }
+.training-panel .player-card-portrait { width: 40px; height: 44px; }
+.training-panel .player-card-sprite { width: 32px; height: 40px; left: 4px; bottom: 0; background-size: 128px 120px; }
+.training-panel .player-card-sprite[data-asset="challenger"] { background-size: 32px 40px; }
+.training-panel .player-card-face strong { font-size: 13px; }
+.training-panel .player-card-level, .training-panel .player-card-xp { font-size: 10px; }
+.training-panel .player-card-marker { font-size: 8px; }
+.training-panel .player-card-marker, .training-panel .player-card-level, .training-panel .player-card-xp { display: none; }
+.training-panel > label { display: block; font-size: 14px; }
+.training-panel select { margin: 4px; padding: 5px; }
+.training-panel > p { font-size: 13px; }
+.training-panel .selection-actions { justify-content: flex-start; margin-top: 8px; }
+.training-cooldown { color: #f7d154; }
+.training-stage { position: relative; height: 190px; overflow: hidden; border: 3px solid #829a79; background: linear-gradient(#20404b 0 38%, #31534a 38% 100%); }
+.training-floor { position: absolute; inset: 72% 0 0; background: repeating-linear-gradient(90deg, #29453e 0 36px, #345a4b 36px 72px); border-top: 3px solid #b9c894; }
+.training-athlete, .training-partner { position: absolute; bottom: 21px; left: 45%; z-index: 3; display: flex; flex-direction: column; align-items: center; width: 64px; transform: translateX(-50%); }
+.training-sprite { display: block; width: 64px; height: 80px; background-size: 256px 240px; background-position: 0 0; background-repeat: no-repeat; image-rendering: pixelated; filter: drop-shadow(3px 3px 0 #142b2b); }
+.training-sprite[data-asset="challenger"] { background-size: 64px 80px; }
+.training-athlete small, .training-partner small { max-width: 110px; padding: 1px 5px; color: #fff4ce; background: #0c171fe6; font-size: 11px; white-space: nowrap; }
+.training-partner { left: 25%; display: none; }
+.training-ball { position: absolute; left: 47%; bottom: 30px; z-index: 4; width: 14px; height: 14px; border: 3px solid #14252c; background: #fff4ce; border-radius: 50%; }
+.training-clock { position: absolute; right: 9px; top: 8px; z-index: 8; padding: 3px 7px; color: #f7d154; background: #0c171f; font-size: 16px; }
+.training-progress { position: absolute; left: 9px; top: 8px; z-index: 8; max-width: calc(100% - 76px); padding: 4px 7px; color: #fff4ce; background: #0c171f; font-size: 13px; }
+.training-treadmill, .training-cones, .training-goal, .training-weights { display: none; position: absolute; }
+.training-stage[data-focus="SPEED"] .training-athlete { left: 50%; bottom: 32px; }
+.training-stage[data-focus="SPEED"] .training-ball { display: none; }
+.training-stage[data-focus="SPEED"] .training-treadmill { display: block; left: 50%; bottom: 21px; width: 170px; height: 30px; transform: translateX(-50%); background: #1a2933; border: 5px solid #809397; box-shadow: 0 9px 0 #172c31; }
+.training-treadmill::before { content: ''; position: absolute; right: 4px; bottom: 20px; height: 70px; border-right: 6px solid #98a8a2; }
+.training-treadmill span { position: absolute; inset: 5px; background: repeating-linear-gradient(90deg, #718383 0 10px, #263b3e 10px 25px); }
+.training-stage[data-focus="DRIBBLING"] .training-athlete { left: 20%; }
+.training-stage[data-focus="DRIBBLING"] .training-ball { left: 21%; }
+.training-stage[data-focus="DRIBBLING"] .training-cones { display: flex; justify-content: space-between; left: 28%; right: 12%; bottom: 29px; }
+.training-cones i { width: 20px; height: 28px; background: #eb8954; clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); border-bottom: 4px solid #fff4ce; }
+.training-stage[data-focus="PASSING"] .training-athlete { left: 75%; }
+.training-stage[data-focus="PASSING"] .training-partner { display: flex; }
+.training-stage[data-focus="PASSING"] .training-ball { left: 37%; }
+.training-stage[data-focus="FINISHING"] .training-athlete { left: 26%; }
+.training-stage[data-focus="FINISHING"] .training-ball { left: 32%; }
+.training-stage[data-focus="FINISHING"] .training-goal { display: block; right: 8%; bottom: 32px; width: 118px; height: 94px; border: 8px solid #f5ead2; border-bottom: 0; background: repeating-linear-gradient(0deg, transparent 0 15px, #b7c5bc88 15px 17px), repeating-linear-gradient(90deg, #1e393b88 0 15px, #b7c5bc88 15px 17px); }
+.training-goal span { display: none; position: absolute; top: -30px; left: 22px; color: #f7d154; font-weight: bold; }
+.training-stage[data-focus="DEFENDING"] .training-athlete { left: 38%; }
+.training-stage[data-focus="DEFENDING"] .training-partner { display: flex; left: 60%; }
+.training-stage[data-focus="DEFENDING"] .training-ball { left: 65%; }
+.training-stage[data-focus="PHYSICAL"] .training-athlete { left: 50%; }
+.training-stage[data-focus="PHYSICAL"] .training-ball { display: none; }
+.training-stage[data-focus="PHYSICAL"] .training-weights { display: block; left: 50%; bottom: 91px; z-index: 5; width: 130px; height: 6px; transform: translateX(-50%); background: #c7d3c4; }
+.training-weights::before, .training-weights::after { content: ''; position: absolute; top: -11px; width: 19px; height: 28px; background: #657780; border: 3px solid #1a2933; }
+.training-weights::before { left: 3px; }.training-weights::after { right: 3px; }
+.training-stage.is-playing[data-focus="SPEED"] .training-treadmill span { animation: treadmill-belt 500ms linear infinite; }
+.training-stage.is-playing[data-focus="SPEED"] .training-athlete { animation: treadmill-run 250ms steps(2) infinite; }
+.training-stage.is-playing[data-focus="DRIBBLING"] .training-athlete { animation: cone-run 2500ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="DRIBBLING"] .training-ball { animation: cone-ball 2500ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="PASSING"] .training-ball { animation: passing-ball 1000ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="PASSING"] .training-athlete, .training-stage.is-playing[data-focus="PASSING"] .training-partner { animation: player-kick 1000ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="FINISHING"] .training-ball { animation: shooting-ball 1250ms ease-out infinite; }
+.training-stage.is-playing[data-focus="FINISHING"] .training-athlete { animation: player-kick 1250ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="FINISHING"] .training-goal span { display: block; animation: goal-flash 1250ms steps(1) infinite; }
+.training-stage.is-playing[data-focus="DEFENDING"] .training-partner { animation: evade-player 1700ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="DEFENDING"] .training-athlete { animation: mark-player 1700ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="DEFENDING"] .training-ball { animation: evade-ball 1700ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="PHYSICAL"] .training-weights { animation: lift-weights 1500ms ease-in-out infinite; }
+.training-stage.is-playing[data-focus="PHYSICAL"] .training-athlete { animation: lift-player 1500ms ease-in-out infinite; }
+@keyframes treadmill-belt { to { background-position-x: -25px; } }
+@keyframes treadmill-run { 50% { translate: 0 -5px; } }
+@keyframes cone-run { 0%,100% { left: 20%; translate: 0 0; } 25% { left: 42%; translate: 0 -16px; } 50% { left: 60%; translate: 0 7px; } 75% { left: 79%; translate: 0 -13px; } }
+@keyframes cone-ball { 0%,100% { left: 21%; translate: 0 0; } 25% { left: 43%; translate: 0 -16px; } 50% { left: 61%; translate: 0 7px; } 75% { left: 80%; translate: 0 -13px; } }
+@keyframes passing-ball { 0%,100% { left: 36%; } 50% { left: 67%; } }
+@keyframes player-kick { 50% { translate: 0 -5px; } }
+@keyframes shooting-ball { 0% { left: 33%; bottom: 30px; opacity: 1; } 68% { left: 79%; bottom: 75px; opacity: 1; } 85%,100% { left: 79%; bottom: 75px; opacity: 0; } }
+@keyframes goal-flash { 0%,69%,100% { opacity: 0; } 70%,90% { opacity: 1; } }
+@keyframes evade-player { 0%,100% { left: 60%; translate: 0 0; } 25% { left: 75%; translate: 0 -12px; } 50% { left: 55%; translate: 0 5px; } 75% { left: 35%; translate: 0 -10px; } }
+@keyframes mark-player { 0%,100% { left: 38%; translate: 0 0; } 25% { left: 53%; translate: 0 -12px; } 50% { left: 36%; translate: 0 5px; } 75% { left: 20%; translate: 0 -10px; } }
+@keyframes evade-ball { 0%,100% { left: 65%; translate: 0 0; } 25% { left: 80%; translate: 0 -12px; } 50% { left: 60%; translate: 0 5px; } 75% { left: 40%; translate: 0 -10px; } }
+@keyframes lift-weights { 0%,100% { bottom: 89px; } 50% { bottom: 140px; } }
+@keyframes lift-player { 0%,100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+@media (max-width: 600px) { .training-panel { inset: 2%; padding: 12px; } .training-stage { height: 170px; } }
+@media (max-height: 650px) { .training-stage { height: 145px; } }
+@media (max-width: 600px) {
+  .stadium-panel { inset: 2%; padding: 12px; gap: 6px; }
+  .coach-dialogue { padding: 8px; gap: 8px; }
+  .coach-lines p { font-size: 13px; }
+  .stadium-pitch { min-height: 240px; }
+  .stadium-athlete { width: 48px; height: 60px; }
+  .stadium-athlete-sprite { width: 40px; height: 50px; flex-basis: 50px; background-size: 160px 150px; }
+  .stadium-athlete-sprite[data-asset="challenger"] { background-size: 40px 50px; }
+  .stadium-athlete-name { max-width: 56px; font-size: 8px; }
+  .stadium-scoreboard strong { min-width: 100px; }
+}
+@media (max-height: 650px) {
+  .stadium-panel { padding: 10px 16px; gap: 5px; }
+  .stadium-pitch { min-height: 195px; }
+  .stadium-athlete { width: 50px; height: 62px; }
+  .stadium-athlete-sprite { width: 44px; height: 55px; flex-basis: 55px; background-size: 176px 165px; }
+  .stadium-athlete-sprite[data-asset="challenger"] { background-size: 44px 55px; }
+  .stadium-athlete-name { max-width: 72px; font-size: 10px; }
+  .stadium-scoreboard strong { padding: 2px 10px; font-size: 32px; }
+  .stadium-event { min-height: 40px; padding: 8px 10px; font-size: 15px; margin: 0; }
+  .stadium-actions button { padding: 7px 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .stadium-athlete, .stadium-ball { transition: none; } }
+
+.audio-toggle { position: absolute; right: 16px; bottom: 8px; z-index: 20; font-size: 12px; padding: 5px 8px; background: #152b32; color: #f7d154; }
+
+.team-uniform-preview { width: 96px; height: 120px; margin: 12px auto; background-size: 384px 360px; background-repeat: no-repeat; image-rendering: pixelated; }
+.starter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.starter-card { min-width: 0; padding: 10px; text-align: center; background: #0c171f; border: 2px solid #50685f; }
+.starter-card h3 { margin: 2px 0 4px; color: #fff4ce; }
+.starter-card .starter-description { min-height: 36px; font-size: 13px; color: #d4dec4; }
+.starter-card button { width: 100%; font-size: 13px; }
+.starter-portrait { width: 96px; height: 120px; margin: auto; background-size: 384px 360px; background-repeat: no-repeat; image-rendering: pixelated; }
+@media (max-width: 560px) { .starter-grid { grid-template-columns: 1fr; } .starter-card { display: grid; grid-template-columns: 96px 1fr; gap: 4px 12px; align-items: center; } .starter-portrait { grid-row: span 3; } }
+.team-color-fields { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-bottom: 12px; }
+.team-color-fields label { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.team-color-fields input[type="color"] { width: 58px; height: 44px; padding: 3px; cursor: pointer; }

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="80" viewBox="0 0 64 80" shape-rendering="crispEdges">
+  <!-- Original duel poses, 32x40. Columns: raised arms / dejected. Rows: home / challenger. -->
+  <defs>
+    <g id="happy">
+      <path fill="var(--skin)" d="M3 5h4v12h4v6H7v-4H3zM25 5h4v14h-4v4h-4v-6h4zM10 5h13v13H10zM13 15h7v5h-7z"/>
+      <path fill="var(--hair)" d="M9 3h14v5H9zM8 6h4v7H8zM21 6h3v4h-3zM12 10h2v2h-2zM19 10h2v2h-2z"/>
+      <path fill="#fff4ce" d="M13 13h7v2h-7zM15 15h3v1h-3z"/>
+      <path fill="var(--shirt)" d="M8 18h17v12H8zM6 17h4v5H6zM23 17h4v5h-4z"/>
+      <path fill="var(--trim)" d="M8 27h17v3H8z"/>
+      <path fill="#f5ead2" d="M13 18h7v3h-7z"/>
+      <path fill="var(--shorts)" d="M9 30h6v6H9zM18 30h6v6h-6z"/>
+      <path fill="var(--shoes)" d="M7 35h8v3H7zM18 35h8v3h-8z"/>
+    </g>
+    <g id="sad">
+      <path fill="var(--skin)" d="M5 21h4v12H5zM24 21h4v12h-4zM13 18h7v5h-7z"/>
+      <path fill="var(--shirt)" d="M8 21h17v10H8zM10 19h13v3H10z"/>
+      <path fill="var(--trim)" d="M8 28h17v3H8z"/>
+      <path fill="#f5ead2" d="M13 21h7v2h-7z"/>
+      <path fill="var(--skin)" d="M10 9h13v13H10z"/>
+      <path fill="var(--hair)" d="M9 6h14v6H9zM8 9h4v7H8zM21 9h3v5h-3zM12 16h3v1h-3zM18 16h3v1h-3zM14 20h5v1h-5zM13 21h2v1h-2zM18 21h2v1h-2z"/>
+      <path fill="var(--shorts)" d="M10 31h6v6h-6zM17 31h6v6h-6z"/>
+      <path fill="var(--shoes)" d="M8 36h8v3H8zM17 36h8v3h-8z"/>
+    </g>
+  </defs>
+  <g style="--skin:#c58b61;--hair:#293139;--shirt:#f7d154;--trim:#e6ae3b;--shorts:#24354a;--shoes:#f5ead2">
+    <use href="#happy"/><use href="#sad" x="32"/>
+  </g>
+  <g transform="translate(0 40)" style="--skin:#986445;--hair:#312d35;--shirt:#de725a;--trim:#ad5146;--shorts:#f5ead2;--shoes:#253b36">
+    <use href="#happy"/><use href="#sad" x="32"/>
+  </g>
+</svg>
