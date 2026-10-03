@@ -38,7 +38,7 @@ export async function openTrainingPanel(
       const title = document.createElement('h2')
       title.textContent = `Setor de ${label}`
       panel.append(title)
-      paragraph(panel, 'Escolha um atleta. A animação dura 5 segundos; 5 treinos deste fundamento com o mesmo atleta dão +1. Entre sessões, espere 1 minuto.')
+      paragraph(panel, 'Cinco sessões deste fundamento dão +1. Cada atleta tem seu próprio intervalo de 1 minuto.')
       const cards = new PlayerCards(roster)
       panel.append(cards.element)
       const stageHolder = document.createElement('div')
@@ -65,22 +65,24 @@ export async function openTrainingPanel(
       actions.className = 'selection-actions'
       panel.append(actions)
       const cancel = button(actions, 'Voltar ao centro', close)
+      const nextAvailableByPlayer = new Map(availability.cooldowns.map(item => [item.ownedPlayerId, item.nextAvailableAt]))
       let selectedPlayerId: string | undefined
       let busy = false
       let completed = false
-      let nextAvailableAt = availability.nextAvailableAt
       const updateCooldown = () => {
-        const seconds = nextAvailableAt ? Math.max(0, Math.ceil((Date.parse(nextAvailableAt) - Date.now()) / 1000)) : 0
-        cooldown.textContent = seconds > 0 ? `Próximo treino em ${seconds} s.` : 'Pronto para treinar.'
         const player = focusedPlayer()
+        const nextAvailableAt = player ? nextAvailableByPlayer.get(player.id) : undefined
+        const seconds = nextAvailableAt ? Math.max(0, Math.ceil((Date.parse(nextAvailableAt) - Date.now()) / 1000)) : 0
+        cooldown.textContent = seconds > 0 ? `Próximo treino para ${player!.name} em ${seconds} s.` : 'Este atleta está pronto para treinar.'
         const stat = focus.toLowerCase() as keyof RosterPlayer['stats']
-        start.disabled = busy || completed || !player || player.stats[stat] >= 99 || (seconds > 0 && !selectedPlayerId)
+        start.disabled = busy || completed || !player || player.stats[stat] >= 99 || seconds > 0
       }
       cards.element.addEventListener('change', () => { renderStage(); updateCooldown() })
       const refreshAvailability = () => {
         void trainingApi.status().then(value => {
           if (!panel.isConnected) return
-          nextAvailableAt = value.nextAvailableAt
+          nextAvailableByPlayer.clear()
+          for (const item of value.cooldowns) nextAvailableByPlayer.set(item.ownedPlayerId, item.nextAvailableAt)
           updateCooldown()
         }).catch(() => {})
       }
@@ -114,7 +116,7 @@ export async function openTrainingPanel(
             if (!panel.isConnected || !scene.scene.isActive()) return
             roster = updated
             onRosterUpdated(updated)
-            nextAvailableAt = result.nextAvailableAt
+            nextAvailableByPlayer.set(result.ownedPlayerId, result.nextAvailableAt)
             completed = true
             if (result.progressAfter !== null) progress.set(`${result.ownedPlayerId}:${focus}`, result.progressAfter)
             renderProgress()
@@ -132,7 +134,7 @@ export async function openTrainingPanel(
               selectedPlayerId = undefined
               cards.disabled = false
               status.textContent = error.code === 'TRAINING_COOLDOWN'
-                ? 'Aguarde 1 minuto desde o último treino antes de iniciar outro.'
+                ? 'Este atleta precisa aguardar 1 minuto desde o último treino.'
                 : error.code === 'TRAINING_STAT_MAX' ? 'Este fundamento já está em 99. Escolha outro.'
                   : 'Não foi possível treinar este jogador.'
               refreshAvailability()

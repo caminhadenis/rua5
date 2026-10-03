@@ -10,13 +10,12 @@ import com.streetfootball.game.match.domain.MatchMode
 import com.streetfootball.game.match.domain.MatchOutcome
 import com.streetfootball.game.match.domain.MatchParticipant
 import com.streetfootball.game.match.domain.MatchRequest
-import com.streetfootball.game.match.domain.StadiumMatchEngine
+import com.streetfootball.game.match.domain.StadiumDuelEngine
 import com.streetfootball.game.match.snapshot
 import com.streetfootball.game.profile.GameProfileEntity
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
 import com.streetfootball.game.progression.Progression
-import com.streetfootball.game.roster.LineupService
 import com.streetfootball.game.roster.OwnedPlayerRepository
 import com.streetfootball.game.roster.PlayerDefinitionRepository
 import com.streetfootball.game.trophy.Trophy
@@ -42,6 +41,7 @@ data class PlayerAward(
 data class StadiumRewards(
     val players: List<PlayerAward>,
     val trophy: Trophy?,
+    val series: SeriesProgress? = null,
 )
 
 data class StadiumInfo(
@@ -55,18 +55,19 @@ data class StadiumInfo(
     val missingTrophies: List<String>,
     val opponentLineup: List<MatchParticipant>,
     val trophy: Trophy,
+    val series: SeriesProgress?,
 )
 
 @Service
 class StadiumService(
     private val profiles: GameProfileRepository,
-    private val lineup: LineupService,
     private val ownedPlayers: OwnedPlayerRepository,
     private val definitions: PlayerDefinitionRepository,
     private val stadiums: StadiumRepository,
     private val trophies: TrophyRepository,
     private val matches: MatchRepository,
     private val engine: MatchEngine,
+    private val series: StadiumSeriesRepository,
 ) {
     private val seeds = SecureRandom()
 
@@ -97,9 +98,9 @@ class StadiumService(
             when {
                 stadium.trophyId in owned -> "COMPLETED"
                 !accessible(profile, stadium) || missing.isNotEmpty() -> "LOCKED"
-                lineup.get(profile.id).ownedPlayerIds.count { it != null } != 5 -> "LINEUP_INCOMPLETE"
                 else -> "AVAILABLE"
             }
+        val latest = series.latest(profile.id, stadium.id)
         return StadiumInfo(
             stadium.id,
             stadium.name,
@@ -109,19 +110,22 @@ class StadiumService(
             stadium.difficulty,
             status,
             missing,
-            opponents(stadium),
+            latest?.takeUnless { it.finished }?.opponents ?: opponents(stadium),
             trophies.definition(stadium.trophyId),
+            latest?.progress(),
         )
     }
 
     private fun opponents(stadium: Stadium): List<MatchParticipant> {
         val slots = stadiums.opponents(stadium.id)
         if (slots.size != 5) throw StadiumRuleException("STADIUM_LOCKED")
-        return slots.map { slot ->
-            val definition = definitions.findById(slot.definitionId).orElseThrow { StadiumRuleException("STADIUM_LOCKED") }
-            if (!definition.enabled) throw StadiumRuleException("STADIUM_LOCKED")
-            definition.snapshot("${stadium.id}:${slot.slot}", slot.level)
-        }
+        return StadiumPolicy.orderedOpponents(
+            slots.map { slot ->
+                val definition = definitions.findById(slot.definitionId).orElseThrow { StadiumRuleException("STADIUM_LOCKED") }
+                if (!definition.enabled) throw StadiumRuleException("STADIUM_LOCKED")
+                definition.snapshot("${stadium.id}:${slot.slot}", slot.level)
+            },
+        )
     }
 
     @Transactional
@@ -129,40 +133,47 @@ class StadiumService(
         profileId: UUID,
         id: String,
         key: UUID,
+        command: StadiumDuelCommand,
     ): StoredMatch {
         val profile = profiles.findByIdForUpdate(profileId) ?: throw ProfileNotFoundException()
         // Lookup precedes all mutable access checks, including the trophy and current lineup.
         matches.findByKey(profileId, key)?.let {
-            if (it.request.mode != MatchMode.STADIUM_5V5 || it.stadiumId != id) throw IdempotencyConflictException()
+            if (it.request.mode != MatchMode.STADIUM_1V1 ||
+                it.stadiumId != id ||
+                it.ownedPlayerId != command.ownedPlayerId ||
+                it.roundNumber != command.roundNumber ||
+                it.expectedSeriesId != command.seriesId
+            ) {
+                throw IdempotencyConflictException()
+            }
             return it
         }
         val stadium = stadiums.find(id)
         val ownedTrophies = trophies.ownedIds(profileId)
-        val slots = lineup.get(profileId).ownedPlayerIds
         StadiumPolicy.validate(
             stadium.trophyId in ownedTrophies,
             accessible(profile, stadium),
             stadiums.requirements(id).any { it !in ownedTrophies },
-            slots,
         )
-        val owned = slots.map { ownedPlayers.findById(requireNotNull(it)).orElseThrow(::OwnedPlayerNotFoundException) }
-        val home =
-            owned.map {
-                if (it.profileId != profileId) throw PlayerNotOwnedException()
-                val definition = definitions.findById(it.playerDefinitionId).orElseThrow(::OwnedPlayerNotFoundException)
-                if (!definition.enabled) throw OwnedPlayerNotFoundException()
-                definition.snapshot(it.id.toString(), it.level, it)
-            }
+        val player = ownedPlayers.findById(command.ownedPlayerId).orElseThrow(::OwnedPlayerNotFoundException)
+        if (player.profileId != profileId) throw PlayerNotOwnedException()
+        val definition = definitions.findById(player.playerDefinitionId).orElseThrow(::OwnedPlayerNotFoundException)
+        if (!definition.enabled) throw OwnedPlayerNotFoundException()
+        val latest = series.latest(profileId, id)
+        val round = if (latest == null || latest.finished) 1 else latest.played + 1
+        if (command.seriesId != latest?.id || command.roundNumber != round) throw StadiumRuleException("STADIUM_SEQUENCE_CHANGED")
+        val attempt = latest?.takeUnless { it.finished } ?: series.start(profileId, id, opponents(stadium))
+        val home = listOf(definition.snapshot(player.id.toString(), player.level, player))
         val input =
-            MatchRequest(MatchMode.STADIUM_5V5, home, opponents(stadium), seeds.nextLong(), StadiumMatchEngine.VERSION, stadium.keeperBase)
+            MatchRequest(MatchMode.STADIUM_1V1, home, listOf(attempt.opponents[round - 1]), seeds.nextLong(), StadiumDuelEngine.VERSION)
         val started = System.nanoTime()
         val result = engine.simulate(input)
         check(result.outcome != MatchOutcome.DRAW)
         val attempts = stadiums.attempts(profileId, id)
         val awards =
-            owned.map { player ->
-                // Reuse progression balancing; losses decay by attempts, the unique victory grants full XP.
-                val xp = Progression.reward(result.outcome, player.level, input.away.sumOf { it.level } / 5, 0, attempts)
+            listOf(player).map { player ->
+                // Stadium retries decay too, preventing unlimited full-XP farming of early rounds.
+                val xp = Progression.reward(result.outcome, player.level, input.away.single().level, attempts, attempts)
                 val advanced = Progression.advance(player.level, player.xp, xp)
                 val award =
                     PlayerAward(
@@ -179,22 +190,26 @@ class StadiumService(
                 if (result.outcome == MatchOutcome.WIN) player.wins++ else player.losses++
                 award
             }
-        val rewards = StadiumRewards(awards, if (result.outcome == MatchOutcome.WIN) trophies.definition(stadium.trophyId) else null)
+        val next = series.advance(attempt, result.outcome == MatchOutcome.WIN)
+        val rewards = StadiumRewards(awards, if (next.wins == 5) trophies.definition(stadium.trophyId) else null, next.progress())
         val stored =
             StoredMatch(
                 UUID.randomUUID(),
                 profileId,
                 null,
-                null,
+                player.id,
                 key,
                 input,
                 result,
                 Instant.now().truncatedTo(ChronoUnit.MICROS),
                 stadiumId = id,
                 stadiumRewards = rewards,
+                seriesId = attempt.id,
+                roundNumber = round,
+                expectedSeriesId = command.seriesId,
             )
         matches.insert(stored)
-        if (rewards.trophy != null) trophies.grant(profileId, stadium.trophyId, id, stored.id, stored.createdAt)
+        if (rewards.trophy != null) trophies.grant(profileId, stadium.trophyId, id, stored.id, stored.createdAt, attempt.id)
         logger.info(
             "Stadium persisted matchId={} profileId={} mode={} sourceId={} seed={} engineVersion={} homeScore={} awayScore={} durationMs={}",
             stored.id,

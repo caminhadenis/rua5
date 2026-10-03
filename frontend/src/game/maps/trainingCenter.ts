@@ -10,10 +10,10 @@ export interface TrainingSector {
 }
 
 export const TRAINING_SECTORS: TrainingSector[] = [
-  { focus: 'SPEED', label: 'VELOCIDADE', coach: 'Treinador Caio', dialogue: 'Nesta esteira, o atleta trabalha a velocidade. Escolha quem vai treinar e pressione Enter para começar.', x: 220, y: 190 },
-  { focus: 'DRIBBLING', label: 'DRIBLE', coach: 'Treinadora Bia', dialogue: 'Três cones, mudanças de direção e bola colada no pé. Escolha seu atleta e pressione Enter para treinar drible.', x: 480, y: 190 },
-  { focus: 'PASSING', label: 'PASSE', coach: 'Treinador Gui', dialogue: 'Aqui treinamos a troca de passes com um parceiro. Escolha seu atleta e pressione Enter para começar.', x: 740, y: 190 },
-  { focus: 'FINISHING', label: 'FINALIZAÇÃO', coach: 'Treinadora Mara', dialogue: 'O gol está vazio para repetir os chutes. Escolha seu atleta e pressione Enter para treinar finalização.', x: 220, y: 330 },
-  { focus: 'DEFENDING', label: 'MARCAÇÃO', coach: 'Treinador Raul', dialogue: 'Acompanhe o adversário em cada mudança de direção. Escolha seu atleta e pressione Enter para treinar marcação.', x: 480, y: 330 },
-  { focus: 'PHYSICAL', label: 'FÍSICO', coach: 'Treinadora Sol', dialogue: 'A musculação ajuda o atleta a ganhar força. Escolha seu atleta e pressione Enter para treinar físico.', x: 740, y: 330 },
+  { focus: 'SPEED', label: 'VELOCIDADE', coach: 'Treinador Caio', dialogue: 'Vamos trabalhar velocidade na esteira.', x: 220, y: 220 },
+  { focus: 'DRIBBLING', label: 'DRIBLE', coach: 'Treinadora Bia', dialogue: 'Vamos treinar mudanças de direção com a bola.', x: 480, y: 220 },
+  { focus: 'PASSING', label: 'PASSE', coach: 'Treinador Gui', dialogue: 'Vamos praticar a troca de passes.', x: 740, y: 220 },
+  { focus: 'FINISHING', label: 'FINALIZAÇÃO', coach: 'Treinadora Mara', dialogue: 'Vamos repetir chutes a gol.', x: 220, y: 365 },
+  { focus: 'DEFENDING', label: 'MARCAÇÃO', coach: 'Treinador Raul', dialogue: 'Vamos praticar a marcação e a perseguição.', x: 480, y: 365 },
+  { focus: 'PHYSICAL', label: 'FÍSICO', coach: 'Treinadora Sol', dialogue: 'Vamos trabalhar força na musculação.', x: 740, y: 365 },
 ]

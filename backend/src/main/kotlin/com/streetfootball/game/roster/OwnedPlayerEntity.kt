@@ -1,12 +1,12 @@
 package com.streetfootball.game.roster
 
+import com.streetfootball.game.progression.StatBonuses
+import com.streetfootball.game.progression.TrainingFocus
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.Version
-import com.streetfootball.game.progression.StatBonuses
-import com.streetfootball.game.progression.TrainingFocus
 import java.time.Instant
 import java.util.UUID
 
@@ -47,7 +47,8 @@ class OwnedPlayerEntity(
     @field:Column(nullable = false)
     var version: Long = 0,
 ) {
-    fun trainingBonuses() = StatBonuses(trainingSpeed, trainingDribbling, trainingPassing, trainingFinishing, trainingDefending, trainingPhysical)
+    fun trainingBonuses() =
+        StatBonuses(trainingSpeed, trainingDribbling, trainingPassing, trainingFinishing, trainingDefending, trainingPhysical)
 
     fun increaseTraining(focus: TrainingFocus) {
         when (focus) {

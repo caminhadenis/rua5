@@ -10,11 +10,11 @@ describe('Benfica interior content', () => {
     expect(new Set(INTERIORS.map(room => room.people.map(person => `${person.x},${person.y}`).join('|'))).size).toBe(INTERIORS.length)
     expect(new Set(INTERIORS.flatMap(room => room.people.map(person => person.sprite))).size).toBeGreaterThanOrEqual(4)
     for (const room of INTERIORS) {
-      expect(room.people).toHaveLength(room.kind === 'gym' ? 1 : 2)
+      expect(room.people).toHaveLength(room.kind === 'gym' ? 1 : room.kind === 'stadium' ? 5 : 2)
       for (const person of room.people) {
         expect(person.x).toBeGreaterThan(110)
         expect(person.x).toBeLessThan(850)
-        expect(person.y).toBeGreaterThan(240)
+        expect(person.y).toBeGreaterThan(room.kind === 'stadium' ? 160 : 240)
         expect(person.y).toBeLessThan(450)
         expect(room.furniture.some(item => Math.abs(person.x - item.x) < item.width / 2 + 20 &&
           Math.abs(person.y - item.y) < item.height / 2 + 20)).toBe(false)

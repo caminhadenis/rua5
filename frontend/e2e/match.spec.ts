@@ -38,9 +38,10 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   await page.goto('/')
   await page.getByRole('button', { name: 'Começar', exact: true }).click()
   await page.getByRole('button', { name: 'Confirmar cores', exact: true }).click()
-  await page.getByRole('button', { name: 'Escolher Cabeleira' }).click()
+  await page.getByRole('button', { name: 'Escolher Loraco' }).click()
   await walkToNpc(page)
-  await expect(page.getByRole('radio', { name: 'Cabeleira, nível 1' })).toBeChecked()
+  await expect(page.getByRole('radio', { name: 'Loraco, nível 1' })).toBeChecked()
+  await expect(page.locator('.player-card-sprite')).toHaveCSS('background-image', /d8a83e/)
   await expect(page.locator('select')).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('player-selection.png') })
   let commands = 0
@@ -52,6 +53,7 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   const result = await response.json() as DuelResponse
   await expect(page.locator('.scene-transition')).toHaveCount(1)
   await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
+  await expect(page.locator('.duelist.home .duel-sprite')).toHaveCSS('background-image', /d8a83e/)
   await expect(page.getByTestId('current-event')).toHaveAttribute('data-sequence', /[1-9]/)
   const visible = await page.evaluate(() => ({
     sequence: Number(document.querySelector<HTMLElement>('[data-testid="current-event"]')!.dataset.sequence),
@@ -314,4 +316,49 @@ test('both teams shoot into their net and a missed shot stays outside', async ({
     return ball.bottom < net.top
   })
   expect(missedNet).toBe(true)
+})
+
+test('duel events move the athletes, carry the ball, dribble and tackle', async ({ page }) => {
+  await page.request.post('/api/v1/profiles', { data: { displayName: 'Coreografia' } })
+  await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_rafa' } })
+  await page.goto('/')
+  await walkToNpc(page)
+  const events: MatchEvent[] = [
+    { sequence: 1, minute: 1, type: 'POSSESSION', side: 'HOME', actorPlayerId: 'home', homeScore: 0, awayScore: 0 },
+    { sequence: 2, minute: 2, type: 'DRIBBLE_SUCCESS', side: 'HOME', actorPlayerId: 'home', homeScore: 0, awayScore: 0 },
+    { sequence: 3, minute: 3, type: 'TACKLE', side: 'AWAY', actorPlayerId: 'away', homeScore: 0, awayScore: 0 },
+  ]
+  const result: DuelResponse = {
+    match: {
+      id: 'choreography',
+      home: [{ playerId: 'home', playerDefinitionId: 'starter_rafa', name: 'Loraco', level: 1 }],
+      away: [{ playerId: 'away', playerDefinitionId: 'npc_cora_01', name: 'Cora', level: 1 }],
+      homeScore: 0, awayScore: 0, outcome: 'DRAW', events,
+    },
+    rewards: null,
+  }
+  await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
+  await page.getByRole('button', { name: 'Iniciar desafio' }).click()
+  await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
+  await expect(page.locator('.duelist.away .duel-sprite')).toHaveCSS('background-image', /challenger-curls/)
+  const show = async (shot: MatchEvent) => page.evaluate(async event => {
+    const { game } = await import('/src/main.ts')
+    const scene = game.scene.getScene('MatchScene') as unknown as { showEvents: (events: MatchEvent[]) => void }
+    scene.showEvents([event])
+  }, shot)
+
+  await show(events[0]!)
+  await expect(page.locator('.duel-ball')).toHaveAttribute('data-owner', 'home')
+  await expect(page.locator('.duelist.home')).toHaveAttribute('data-action', 'carry')
+  const firstLane = await page.locator('.duelist.home').evaluate(el => (el as HTMLElement).style.getPropertyValue('--duelist-y'))
+
+  await show(events[1]!)
+  await expect(page.locator('.duelist.home')).toHaveAttribute('data-action', 'dribble')
+  await expect(page.locator('.duelist.away')).toHaveAttribute('data-action', 'stumble')
+  const secondLane = await page.locator('.duelist.home').evaluate(el => (el as HTMLElement).style.getPropertyValue('--duelist-y'))
+  expect(secondLane).not.toBe(firstLane)
+
+  await show(events[2]!)
+  await expect(page.locator('.duelist.away')).toHaveAttribute('data-action', 'tackle')
+  await expect(page.locator('.duel-ball')).toHaveAttribute('data-owner', 'away')
 })

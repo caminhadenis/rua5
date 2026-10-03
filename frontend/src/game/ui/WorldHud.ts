@@ -9,8 +9,7 @@ export class WorldHud {
   private readonly dialogueText: Phaser.GameObjects.Text
   private readonly objective: Phaser.GameObjects.Text
   private completed = false
-  private rosterCount = 0
-  isDialogueOpen = false
+    isDialogueOpen = false
   canChallenge = false
 
   constructor(scene: Phaser.Scene, onChallenge: () => void) {
@@ -55,7 +54,6 @@ export class WorldHud {
   }
 
   setRoster(roster: RosterPlayer[]): void {
-    this.rosterCount = roster.length
     this.updateObjective()
     const player = roster[0]
     if (player) this.rosterText.setText(`${player.name} · Nv. ${player.level} · ${player.xp}/${player.xpToNextLevel ?? 'máx'} XP`)
@@ -69,9 +67,7 @@ export class WorldHud {
   private updateObjective(): void {
     this.objective.setText(this.completed
       ? '★ Taça do Benfica conquistada! Bairro concluído.'
-      : this.rosterCount < 5
-        ? `Objetivo: vença e recrute · ${this.rosterCount}/5 no elenco · Explore a quadra →`
-        : 'Objetivo: escale cinco em Equipe · Estádio no sudeste do bairro ↘')
+      : 'Objetivo: prepare seu atleta · Vença 5 duelos seguidos no estádio ↘')
   }
 
   showPrompt(nearby: boolean, action = 'Conversar'): void {

@@ -1,30 +1,47 @@
 package com.streetfootball.game.stadium
 
+import com.streetfootball.game.match.domain.MatchParticipant
+import com.streetfootball.game.match.domain.MatchStats
 import org.junit.jupiter.api.Test
-import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class StadiumPolicyTest {
     @Test
-    fun `five distinct slots requirements access and permanent completion are mandatory`() {
-        val full = List(5) { UUID.randomUUID() }
-        StadiumPolicy.validate(false, true, false, full)
-
-        fun rejected(
-            code: String,
-            completed: Boolean = false,
-            access: Boolean = true,
-            missing: Boolean = false,
-            slots: List<UUID?> = full,
-        ) {
-            assertEquals(code, assertFailsWith<StadiumRuleException> { StadiumPolicy.validate(completed, access, missing, slots) }.code)
+    fun `access requirements and permanent completion are mandatory without lineup requirements`() {
+        StadiumPolicy.validate(false, true, false)
+        for ((code, flags) in listOf(
+            "STADIUM_ALREADY_COMPLETED" to listOf(true, true, false),
+            "STADIUM_LOCKED" to listOf(false, false, false),
+            "STADIUM_REQUIREMENT_NOT_MET" to listOf(false, true, true),
+        )) {
+            assertEquals(
+                code,
+                assertFailsWith<StadiumRuleException> {
+                    StadiumPolicy.validate(flags[0], flags[1], flags[2])
+                }.code,
+            )
         }
-        rejected("STADIUM_ALREADY_COMPLETED", completed = true)
-        rejected("STADIUM_LOCKED", access = false)
-        rejected("STADIUM_REQUIREMENT_NOT_MET", missing = true)
-        rejected("LINEUP_INCOMPLETE", slots = full.take(4))
-        rejected("LINEUP_INCOMPLETE", slots = full.take(4) + null)
-        rejected("LINEUP_INCOMPLETE", slots = List(5) { full.first() })
+    }
+
+    @Test
+    fun `five opponents ordered by effective strength leave the best for last with stable ties`() {
+        fun player(
+            id: String,
+            level: Int,
+            stat: Int,
+        ) = MatchParticipant(id, id, id, level, MatchStats(stat, stat, stat, stat, stat, stat))
+        val players =
+            listOf(
+                player("b", 6, 40),
+                player("a", 6, 40),
+                player("best", 7, 50),
+                player("weak", 1, 80),
+                player("strong", 6, 70),
+            )
+        val sorted = StadiumPolicy.orderedOpponents(players)
+        assertEquals(listOf("weak", "a", "b", "strong", "best"), sorted.map { it.playerId })
+        assertEquals(sorted, StadiumPolicy.orderedOpponents(players.reversed()))
+        assertFailsWith<StadiumRuleException> { StadiumPolicy.orderedOpponents(players.take(4)) }
     }
 }

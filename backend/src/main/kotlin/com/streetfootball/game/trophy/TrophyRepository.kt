@@ -39,14 +39,16 @@ class TrophyRepository(
         stadiumId: String,
         matchId: UUID,
         at: Instant,
+        seriesId: UUID? = null,
     ) {
         jdbc.update(
-            "INSERT INTO user_trophy (profile_id, trophy_id, stadium_id, match_id, won_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO user_trophy (profile_id, trophy_id, stadium_id, match_id, won_at, series_id) VALUES (?, ?, ?, ?, ?, ?)",
             profileId,
             trophyId,
             stadiumId,
             matchId,
             Timestamp.from(at),
+            seriesId,
         )
     }
 }

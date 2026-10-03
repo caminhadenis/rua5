@@ -33,7 +33,8 @@ test('enter the training center, choose a sector and complete one five second dr
       const { game } = await import('/src/main.ts')
       return game.scene.getScene('InteriorScene').dialogue?.list[1]?.text as string
     })
-    expect(coachWords).toMatch(/pressione Enter/i)
+    expect(coachWords).toContain('Quer treinar este fundamento?')
+    expect(coachWords).toContain('Clique Enter para treinar')
     await page.keyboard.press('Enter', { delay: 80 })
   }
   for (const [focus, prop] of [
@@ -68,7 +69,7 @@ test('enter the training center, choose a sector and complete one five second dr
   await expect(stage.locator('.training-progress')).toContainText('1/5 · faltam 4 para +1')
   await panel.getByRole('button', { name: 'Voltar ao centro' }).click()
   await openSector('DRIBBLING')
-  await expect(panel.getByText(/Próximo treino em/)).toBeVisible()
+  await expect(panel.getByText(/Próximo treino para Cabeleira em/)).toBeVisible()
   await expect(stage.locator('.training-progress')).toContainText('1/5 · faltam 4 para +1')
   await expect(panel.getByRole('button', { name: 'Começar treino' })).toBeDisabled()
   await page.reload()

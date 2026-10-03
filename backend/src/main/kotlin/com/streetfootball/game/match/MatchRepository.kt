@@ -27,6 +27,9 @@ data class StoredMatch(
     val rewards: DuelRewards? = null,
     val stadiumId: String? = null,
     val stadiumRewards: StadiumRewards? = null,
+    val seriesId: UUID? = null,
+    val roundNumber: Int? = null,
+    val expectedSeriesId: UUID? = null,
 )
 
 /** JDBC joins the application service's JPA transaction through the same DataSource. */
@@ -47,10 +50,11 @@ class MatchRepository(
                         id = row.getObject("id", UUID::class.java),
                         profileId = row.getObject("profile_id", UUID::class.java),
                         stadiumId = row.getString("stadium_id"),
+                        seriesId = row.getObject("series_id", UUID::class.java),
+                        roundNumber = row.getObject("round_number") as Int?,
+                        expectedSeriesId = row.getObject("expected_series_id", UUID::class.java),
                         stadiumRewards =
-                            if (row.getString("mode") ==
-                                "STADIUM_5V5"
-                            ) {
+                            if (row.getString("stadium_id") != null) {
                                 row.getString("rewards")?.let { json.readValue(it, StadiumRewards::class.java) }
                             } else {
                                 null
@@ -100,8 +104,9 @@ class MatchRepository(
             INSERT INTO game_match (
                 id, profile_id, owned_player_id, mode, source_type, source_id,
                 home_score, away_score, outcome, seed, engine_version,
-                request_snapshot, events, statistics, idempotency_key, created_at, rewards, stadium_id, home_penalties, away_penalties
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?::jsonb, ?, ?, ?)
+                request_snapshot, events, statistics, idempotency_key, created_at, rewards, stadium_id, home_penalties, away_penalties,
+                series_id, round_number, expected_series_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             match.id,
             match.profileId,
@@ -123,6 +128,9 @@ class MatchRepository(
             match.stadiumId,
             match.result.penalties?.home,
             match.result.penalties?.away,
+            match.seriesId,
+            match.roundNumber,
+            match.expectedSeriesId,
         )
     }
 }

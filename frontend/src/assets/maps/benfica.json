@@ -7496,6 +7496,126 @@
           ]
         },
         {
+          "id": 35,
+          "name": "challenger-9",
+          "type": "",
+          "x": 1888,
+          "y": 480,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.09" }
+          ]
+        },
+        {
+          "id": 36,
+          "name": "challenger-10",
+          "type": "",
+          "x": 320,
+          "y": 880,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.10" }
+          ]
+        },
+        {
+          "id": 37,
+          "name": "challenger-11",
+          "type": "",
+          "x": 1120,
+          "y": 1168,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.11" }
+          ]
+        },
+        {
+          "id": 38,
+          "name": "challenger-12",
+          "type": "",
+          "x": 480,
+          "y": 752,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.12" }
+          ]
+        },
+        {
+          "id": 39,
+          "name": "challenger-13",
+          "type": "",
+          "x": 1200,
+          "y": 112,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.13" }
+          ]
+        },
+        {
+          "id": 40,
+          "name": "challenger-14",
+          "type": "",
+          "x": 144,
+          "y": 496,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.14" }
+          ]
+        },
+        {
+          "id": 41,
+          "name": "challenger-15",
+          "type": "",
+          "x": 1616,
+          "y": 592,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.15" }
+          ]
+        },
+        {
+          "id": 42,
+          "name": "challenger-16",
+          "type": "",
+          "x": 1968,
+          "y": 1104,
+          "width": 0,
+          "height": 0,
+          "rotation": 0,
+          "visible": true,
+          "point": true,
+          "properties": [
+            { "name": "spawnKey", "type": "string", "value": "benfica.court.16" }
+          ]
+        },
+        {
           "id": 16,
           "name": "lia",
           "type": "resident",

@@ -10,26 +10,30 @@ import type { TrainingFocus } from '../../api/gameApi'
 export class InteriorScene extends Phaser.Scene {
   player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
   private location!: InteriorLocation
-  private people: { name: string; dialogue: string; role?: 'trainer'; focus?: TrainingFocus; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody }[] = []
+  private people: { name: string; dialogue: string; role?: 'trainer' | 'stadium-coach' | 'supporter'; focus?: TrainingFocus; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody }[] = []
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'ENTER' | 'ESC', Phaser.Input.Keyboard.Key>
   private walk!: PlayerWalkAnimation
   private dialogue?: Phaser.GameObjects.Container
   private dialogueFocus?: TrainingFocus
   private trainingOpen = false
+  private stadiumId = 'benfica_stadium'
+  private dialogueCoach = false
 
   constructor() { super('InteriorScene') }
 
-  init(data: { key: string }): void {
+  init(data: { key: string; stadiumId?: string }): void {
     const location = INTERIORS.find(place => place.key === data.key)
     if (!location) throw new Error(`Unknown interior: ${data.key}`)
     this.location = location
+    this.stadiumId = data.stadiumId ?? 'benfica_stadium'
   }
 
   create(): void {
     this.trainingOpen = false
     this.dialogueFocus = undefined
     this.dialogue = undefined
+    this.dialogueCoach = false
     const width = this.scale.width
     const height = this.scale.height
     this.add.rectangle(width / 2, height / 2, width, height, this.location.wallColor)
@@ -49,7 +53,7 @@ export class InteriorScene extends Phaser.Scene {
         fontFamily: 'monospace', fontSize: '14px', color: '#152b32',
       }).setOrigin(0.5)
     }
-    if (this.location.kind !== 'gym') this.add.rectangle(480, 354, 148, 76, this.location.accentColor, 0.34).setStrokeStyle(2, this.location.accentColor)
+    if (this.location.kind !== 'gym' && this.location.kind !== 'stadium') this.add.rectangle(480, 354, 148, 76, this.location.accentColor, 0.34).setStrokeStyle(2, this.location.accentColor)
     this.add.text(480, 42, this.location.name.toUpperCase(), {
       fontFamily: 'monospace', fontSize: '26px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 12, y: 5 },
     }).setOrigin(0.5)
@@ -92,6 +96,7 @@ export class InteriorScene extends Phaser.Scene {
       this.physics.add.collider(this.player, furniture)
     }
     if (this.location.kind === 'gym') this.drawTrainingCenter()
+    if (this.location.kind === 'stadium') this.drawStadium()
     const residents = this.location.kind === 'gym'
       ? [...this.location.people, ...TRAINING_SECTORS.map(sector => ({
         name: sector.coach, dialogue: sector.dialogue, role: 'trainer' as const, focus: sector.focus,
@@ -102,6 +107,7 @@ export class InteriorScene extends Phaser.Scene {
       const sprite = this.physics.add.staticImage(person.x, person.y, person.sprite)
       sprite.body.setSize(18, 14).setOffset(7, 26)
       sprite.setDepth(person.y)
+      if (person.role === 'supporter') sprite.setTint(0xe9b3a2)
       this.physics.add.collider(this.player, sprite)
       this.tweens.add({ targets: sprite, y: person.y - 2, duration: 700 + index * 230, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
       return { ...person, sprite }
@@ -112,6 +118,9 @@ export class InteriorScene extends Phaser.Scene {
     const animate = (_time: number, delta: number) => this.walk.update(Boolean(this.dialogue?.visible), delta)
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, animate)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, animate))
+    const resetInput = () => this.input.keyboard?.resetKeys()
+    this.events.on(Phaser.Scenes.Events.WAKE, resetInput)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.WAKE, resetInput))
     if (this.location.kind === 'gym') {
       const trainer = this.people.find(person => person.role === 'trainer' && !person.focus)
       if (trainer) this.showDialogue(trainer.name, trainer.dialogue, 'Treinadora')
@@ -125,6 +134,14 @@ export class InteriorScene extends Phaser.Scene {
     const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC)
     if (this.dialogue?.visible) {
       this.player.setVelocity(0, 0)
+      if (enter && this.dialogueCoach) {
+        this.dialogue.setVisible(false)
+        this.dialogueCoach = false
+        this.input.keyboard!.resetKeys()
+        this.scene.sleep()
+        this.scene.run('StadiumScene', { id: this.stadiumId })
+        return
+      }
       if (enter && this.dialogueFocus) {
         const focus = this.dialogueFocus
         this.dialogue.setVisible(false)
@@ -138,7 +155,7 @@ export class InteriorScene extends Phaser.Scene {
         }, roster => world.events.emit('roster-updated', roster))
         return
       }
-      if (interact || enter || escape) { this.dialogue.setVisible(false); this.dialogueFocus = undefined }
+      if (interact || enter || escape) { this.dialogue.setVisible(false); this.dialogueFocus = undefined; this.dialogueCoach = false }
       return
     }
     if (escape || (interact && canInteract(this.player.body.center, { x: 480, y: 475 }))) {
@@ -151,7 +168,9 @@ export class InteriorScene extends Phaser.Scene {
     if ((interact || enter) && nearby) {
       this.player.setVelocity(0, 0)
       this.dialogueFocus = nearby.focus
-      this.showDialogue(nearby.name, nearby.dialogue, nearby.role === 'trainer' ? 'Treinador(a)' : 'Morador')
+      this.dialogueCoach = nearby.role === 'stadium-coach'
+      this.showDialogue(nearby.name, nearby.dialogue, nearby.role === 'supporter' ? 'Torcedor do time de Dimas'
+        : nearby.role === 'trainer' || this.dialogueCoach ? 'Treinador(a)' : 'Morador')
       return
     }
     const velocity = movementVelocity({
@@ -166,11 +185,33 @@ export class InteriorScene extends Phaser.Scene {
 
   private showDialogue(name: string, words: string, role: string): void {
     if (this.dialogue) this.dialogue.destroy()
-    const background = this.add.rectangle(0, 0, 912, 120, 0x152b32).setOrigin(0).setStrokeStyle(3, 0xf7d154)
-    const text = this.add.text(18, 12, `${name} · ${role}\n${words}`, {
-      fontFamily: 'monospace', fontSize: '18px', color: '#f5ead2', wordWrap: { width: 865 }, lineSpacing: 5,
+    const invitation = this.dialogueFocus ? '\nQuer treinar este fundamento?' : ''
+    const prompt = this.dialogueCoach ? 'Enter para desafiar · E / Esc para fechar'
+      : this.dialogueFocus ? 'Clique Enter para treinar · E / Esc para fechar' : 'Enter / E / Esc para fechar'
+    const background = this.add.rectangle(0, 0, 912, 94, 0x152b32).setOrigin(0).setStrokeStyle(3, 0xf7d154)
+    const text = this.add.text(18, 9, `${name} · ${role}\n${words}${invitation}\n${prompt}`, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#f5ead2', wordWrap: { width: 865 }, lineSpacing: 3,
     })
-    this.dialogue = this.add.container(24, 380, [background, text]).setDepth(100)
+    this.dialogue = this.add.container(24, 76, [background, text]).setDepth(100)
+  }
+
+  private drawStadium(): void {
+    const lines = this.add.graphics().setDepth(1)
+    lines.lineStyle(3, 0xf5ead2, 0.8)
+    lines.strokeRect(380, 215, 280, 160)
+    lines.lineBetween(520, 215, 520, 375)
+    lines.strokeCircle(520, 295, 30)
+    lines.strokeRect(368, 265, 12, 60)
+    lines.strokeRect(660, 265, 12, 60)
+    for (const y of [170, 395]) {
+      this.add.rectangle(520, y, 340, 16, 0x984f47).setStrokeStyle(2, 0xf5ead2)
+    }
+    this.add.text(520, 395, 'VAMOS, DIMAS!', { fontFamily: 'monospace', fontSize: '12px', color: '#fff4ce' }).setOrigin(0.5).setDepth(2)
+    this.add.text(725, 215, 'E · TREINADOR', { fontFamily: 'monospace', fontSize: '12px', color: '#fff4ce', backgroundColor: '#763f41' }).setOrigin(0.5).setDepth(2)
+    for (const x of [150, 820]) {
+      const flag = this.add.rectangle(x, 175, 42, 24, 0x984f47).setStrokeStyle(3, 0xf5ead2).setOrigin(0, 0.5)
+      this.tweens.add({ targets: flag, angle: { from: -8, to: 8 }, duration: 600, yoyo: true, repeat: -1 })
+    }
   }
 
   private drawTrainingCenter(): void {
@@ -204,8 +245,6 @@ export class InteriorScene extends Phaser.Scene {
         equipment.fillRect(x - 92, y + 6, 8, 18)
         equipment.fillRect(x - 28, y + 6, 8, 18)
       }
-      const athlete = this.add.image(x - 62, y + 35, 'resident-sport').setDepth(y + 35).setName(`training-athlete-${focus}`)
-      this.tweens.add({ targets: athlete, y: y + 31, x: x - 56, duration: 550 + x / 4, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
       this.add.text(x + 77, y + 56, 'E · TREINADOR', { fontFamily: 'monospace', fontSize: '10px', color: '#f7d154', backgroundColor: '#152b32' })
         .setOrigin(0.5).setDepth(3)
     }

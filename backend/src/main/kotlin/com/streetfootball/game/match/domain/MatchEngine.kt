@@ -4,7 +4,7 @@ interface MatchEngine {
     fun simulate(request: MatchRequest): MatchResult
 }
 
-enum class MatchMode { DUEL_1V1, STADIUM_5V5 }
+enum class MatchMode { DUEL_1V1, STADIUM_1V1, STADIUM_5V5 }
 
 enum class MatchSide { HOME, AWAY }
 
@@ -49,7 +49,7 @@ data class MatchRequest(
     val awayKeeperBase: Int = 35,
 ) {
     init {
-        val size = if (mode == MatchMode.DUEL_1V1) 1 else 5
+        val size = if (mode == MatchMode.STADIUM_5V5) 5 else 1
         require(home.size == size && away.size == size) { "Invalid participant count for $mode." }
         require((home + away).map { it.playerId }.distinct().size == size * 2) { "Participant IDs must be distinct." }
         require(awayKeeperBase in 1..99)

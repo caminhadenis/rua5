@@ -2,7 +2,7 @@
 
 RPG single-player de futebol descrito em [`docs/GAME_SPEC.md`](docs/GAME_SPEC.md).
 O repositório contém o **Milestone 7**: o primeiro bairro pode ser concluído do perfil
-novo ao troféu, com oito desafiantes recrutáveis, equipe de cinco e estádio autoritativo.
+novo ao troféu, com desafiantes recrutáveis e cinco duelos individuais consecutivos no estádio.
 Há somente um bairro (Benfica), com áudio mínimo, orientação de progresso e recuperação de erros.
 
 ## Stack
@@ -183,7 +183,7 @@ Uma sessão existente entra no mundo com seu elenco persistido.
   dos cinco slots. **Salvar escalação** persiste a equipe; slots vazios são permitidos.
   Mover um jogador esvazia seu slot anterior. **Retirar** deixa o jogador na reserva.
 - O conteúdo permite starter + oito recrutáveis. Vença quatro NPCs, convide-os e salve
-  cinco jogadores na escalação para disputar o estádio. Os demais são reforços opcionais.
+  um atleta próprio para disputar o estádio. Os demais são alternativas opcionais.
 
 ### API de recrutamento e lineup
 
@@ -221,15 +221,16 @@ desejado, pressione **E** para conversar e **Enter** para escolher um atleta. Cl
 5 treinos do mesmo fundamento com o mesmo atleta para ganhar +1 nesse atributo, até 99.
 O progresso e quantos faltam aparecem na tela de treino. Antes do quinto, a habilidade
 e o desempenho na partida não mudam. A treinadora Jo explica a regra ao entrar no
-centro. O treino não concede XP. Só há um
-treino por vez e é preciso esperar 1 minuto antes de começar outro, mesmo com um
-atleta diferente. A melhora aparece em Equipe e vale nas próximas partidas.
+centro. O treino não concede XP. Cada atleta tem seu próprio intervalo de 1 minuto;
+outro atleta pode treinar imediatamente. A melhora aparece em Equipe e vale nas próximas
+partidas. Cada departamento tem um treinador; converse com ele e pressione Enter para
+abrir a escolha do atleta.
 
 `POST /api/v1/training/sessions` recebe `Idempotency-Key: <uuid>` e JSON
 `{"ownedPlayerId":"<uuid>","focus":"DRIBBLING"}`. Os focos aceitos são
 `SPEED`, `DRIBBLING`, `PASSING`, `FINISHING`, `DEFENDING` e `PHYSICAL`.
-`GET /api/v1/training/status` informa quando o próximo treino estará disponível e
-o progresso por atleta e fundamento. A resposta do comando contém atributo e progresso
+`GET /api/v1/training/status` retorna `cooldowns` por `ownedPlayerId` e progresso por
+atleta e fundamento. A resposta do comando contém atributo e progresso
 anterior/atual, além de `nextAvailableAt`. O servidor valida
 posse, aplica cooldown e persiste a recompensa de forma transacional. Repetir a
 mesma chave recupera o resultado; nova chave antes do prazo retorna
@@ -374,32 +375,46 @@ cores do time `10`, treino/balanceamento inicial `11` e ajuste fino de Davi `12`
 
 Consulte `AGENTS.md` e `docs/GAME_SPEC.md` antes de avançar para qualquer milestone seguinte.
 
-## Milestone 6 — Estádio
+## Milestone 6 — Estádio com duelos 1x1
 
-O ponto `benfica.stadium.entry` fica no sudeste do bairro, após os desafiantes mais fortes. Aproxime-se e use E/Enter
-ou clique na placa. A tela exibe os cinco adversários e a disponibilidade autoritativa.
-Com cinco jogadores na escalação salva, permite iniciar, acelerar/pular o playback e
-ver XP individual e troféu. Após a vitória, a placa e a tela mostram **conquistado**,
-inclusive após reload. O estádio não oferece revanche depois do troféu.
+Aproxime-se do portão `benfica.stadium.entry` no sudeste e use E/Enter. O avatar
+entra no interior; caminhe até Dimas, converse com E e confirme com Enter.
+Os torcedores da casa apoiam o time do estádio e torcem contra você.
+
+Escolha um atleta do elenco para cada duelo, podendo repetir ou trocar entre jogos.
+Dimas possui cinco adversários, ordenados por nível e soma dos atributos efetivos;
+o melhor entra por último. Vença os cinco consecutivamente para ganhar a taça.
+Uma derrota encerra a tentativa e exige recomeçar pelo primeiro rival.
+Empates são decididos nos pênaltis. Não precisa formar ou escalar cinco atletas.
+
+Na quadra há somente dois jogadores. A torcida usa avatares maiores, braços animados,
+bandeiras e faixa vermelho/creme em arquibancadas nos quatro lados, fora da área de
+jogo. Dimas aparece nas conversas: após cada duelo, a quadra dá lugar ao seu retrato
+e comentário. Na vitória, ele anuncia o próximo rival; confirme para escolher seu
+atleta e iniciar o próximo desafio. O playback permite acelerar ou pular. Você pode
+retornar ao interior entre jogos; reload retoma a sequência ativa.
 
 API da sessão:
 
-- `GET /api/v1/stadiums`: estados `LINEUP_INCOMPLETE`, `LOCKED`, `AVAILABLE`, `COMPLETED`.
-- `GET /api/v1/stadiums/benfica_stadium`: requisitos faltantes, adversários e troféu.
-- `POST /api/v1/stadiums/benfica_stadium/matches`, com `Idempotency-Key: UUID` e sem payload necessário.
-  Usa o lineup persistido; o cliente não escolhe seed, placar ou recompensas.
-- Resposta `{match, rewards}`: `match.mode = STADIUM_5V5`, cinco participantes de cada lado,
-  eventos, placar regulamentar, outcome, `penalties: {home, away} | null`, seed e engineVersion.
-  `rewards.players` contém os cinco snapshots de XP/nível e `rewards.trophy` é nulo em derrota.
-- Erros: `LINEUP_INCOMPLETE`, `STADIUM_LOCKED`, `STADIUM_REQUIREMENT_NOT_MET`,
-  `STADIUM_ALREADY_COMPLETED` e `IDEMPOTENCY_CONFLICT` retornam 409; estádio inexistente, 404.
-- A mesma chave retorna o snapshot original mesmo após vitória, troca do lineup ou bloqueio.
-  Uma chave nova depois da conquista é rejeitada. Chaves são compartilhadas com duelos.
+- GET `/api/v1/stadiums/{id}`: status AVAILABLE/LOCKED/COMPLETED, cinco adversários
+  ordenados e `series: {id, played, wins, finished} | null`.
+- POST `/api/v1/stadiums/{id}/matches`: exige Idempotency-Key e corpo
+  `{ownedPlayerId, seriesId, roundNumber}`. Envie o ID da última tentativa do GET
+  (null antes da primeira); rodada 1 após derrota ou `played + 1` se ativa.
+- Resposta: modo STADIUM_1V1 v3, um atleta por lado, eventos, placar/pênaltis,
+  XP somente de quem participou e progresso da tentativa em `rewards.series`.
+  Troféu somente na quinta vitória consecutiva.
+- Comando de tela antiga recebe STADIUM_SEQUENCE_CHANGED; mesma chave recupera o
+  resultado original sem duplicar XP/avanço. Nova chave após conquista é rejeitada.
 
-V8 adiciona estádio, escalação adversária, requisitos e troféus, preservando migrations antigas.
-Duelo permanece engine v1; estádio usa v2, com primitivas compartilhadas e goleiro abstrato.
-Pênaltis não somam ao placar regulamentar nem aos eventos `GOAL`.
-Veja [ADR-0004](docs/decisions/ADR-0004-stadium-matches.md).
+A migration V19 preserva partidas e troféus antigos. O engine 5x5 fica disponível
+somente para reprodução histórica. Veja [ADR-0008](docs/decisions/ADR-0008-stadium-duel-series.md).
+
+Versão local: [http://localhost:5173](http://localhost:5173). Para atualizar mantendo o banco:
+
+```bash
+docker compose up -d --build --wait
+```
 
 ## Milestone 7 — Benfica do início ao troféu
 
@@ -407,7 +422,7 @@ O caminho introdutório segue Nilo → Cora → Davi → Bia, avançando para le
 Cada vitória permite um convite no resultado ou na tela Equipe. Rui, Sol, Teca e Zeca
 oferecem alternativas mais fortes, com níveis de 2 a 5. A distância até o estádio diminui
 conforme o nível dos desafiantes aumenta. Os diálogos indicam onde procurar.
-O HUD orienta formar cinco, salvar a escalação e visitar o estádio no sudeste;
+O HUD orienta preparar um atleta e vencer os cinco duelos consecutivos no estádio;
 após a vitória, mostra a conquista do bairro.
 
 As quatro casas, a escola, a academia e o prédio têm plantas, pisos, móveis e moradores
@@ -428,9 +443,9 @@ deste milestone.
 
 O balanceamento usa os seeds reais da V9, os ajustes V11/V12 e engines existentes, sem alterar partidas
 históricas. `MilestoneSevenIntegrationTest` simula 2.000 seeds por combinação:
-primeiro duelo 71–80% de vitórias, primeiro time de cinco 26–31% no estádio e
-um time com os reforços do bairro 55–59%. São probabilidades, não garantias. Explorar
-melhora o time sem exigir elevar todos ao nível máximo.
+primeiro duelo aproximadamente 72–85% de vitórias. A sequência completa do estádio
+é mais difícil no nível inicial e fica mais provável com evolução e treino; as cinco
+vitórias devem ocorrer na mesma tentativa. São probabilidades, não garantias.
 
 Validação completa:
 
@@ -455,7 +470,8 @@ POSTGRES_PORT=55434 docker compose -p jogorua-m7-validation down -v
 ```
 
 O teste `vertical-slice.spec.ts` cria perfil e starter pela interface, caminha com teclado,
-desafia/recruta quatro NPCs, monta cinco slots e disputa até ganhar a taça. Não injeta
+desafia/recruta quatro NPCs, verifica o lineup opcional, entra no estádio, conversa com
+Dimas e disputa duelos individuais até vencer os cinco consecutivamente e ganhar a taça. Não injeta
 elenco, XP, seed ou placar e não escreve SQL. Perde respostas de duelo e estádio após o
 commit para verificar idempotência; confere XP, reload, lineup, troféu e rejeição de nova
 partida. Uma captura da conquista é salva em `frontend/test-results/`.

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { talkToStadiumCoach } from './stadiumHelpers'
 import type { DuelResponse, RosterPlayer, StadiumResponse } from '../src/api/gameApi'
 
 async function state(page: Page) {
@@ -11,7 +12,7 @@ async function state(page: Page) {
 }
 
 // Only read scene coordinates. Movement, recruitment and lineup use real user controls.
-async function walk(page: Page, axis: 'x' | 'y', target: number, dialogue = false) {
+async function walk(page: Page, axis: 'x' | 'y', target: number, dialogue = false, allowEarlyDialogue = false) {
   const before = await state(page)
   const positive = target > before[axis]
   const key = axis === 'x' ? (positive ? 'ArrowRight' : 'ArrowLeft') : (positive ? 'ArrowDown' : 'ArrowUp')
@@ -19,8 +20,10 @@ async function walk(page: Page, axis: 'x' | 'y', target: number, dialogue = fals
   try {
     await expect.poll(async () => {
       const current = await state(page)
-      return dialogue ? current.dialogue : positive ? current[axis] >= target - 4 : current[axis] <= target + 4
+      return (allowEarlyDialogue && current.dialogue) || (dialogue ? current.dialogue : positive ? current[axis] >= target - 4 : current[axis] <= target + 4)
     }, { timeout: 18_000, intervals: [20] }).toBe(true)
+  } catch (error) {
+    throw new Error(`Walking ${axis} to ${target}, current ${JSON.stringify(await state(page))}`, { cause: error })
   } finally { await page.keyboard.up(key) }
 }
 
@@ -61,9 +64,8 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
     }
     if (index === 3) {
       // The hedge west of Bia blocks the direct approach; follow the southern path.
-      await walk(page, 'y', 752)
-      await walk(page, 'x', 1216)
-      await walk(page, 'y', 688, true)
+      await walk(page, 'y', 752, false, true)
+      if (!(await state(page)).dialogue) await walk(page, 'x', 1216, true)
     }
     await page.keyboard.press('Enter', { delay: 80 })
     let won = false
@@ -113,9 +115,12 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
   await page.getByRole('button', { name: 'Salvar escalação' }).click()
   await expect(page.getByRole('status').first()).toContainText('5 / 5 escalados · Escalação salva')
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
-  await walk(page, 'x', 1936)
+  await walk(page, 'y', 336)
+  await walk(page, 'x', 2128)
   await walk(page, 'y', 1320)
+  await walk(page, 'x', 1936)
   await page.keyboard.press('e', { delay: 80 })
+  await talkToStadiumCoach(page)
   await expect(page.getByText('Professor Dimas · treinador')).toBeVisible()
   const stadiumReceipts: StadiumResponse[] = []
   const stadiumKeys: string[] = []
@@ -127,24 +132,26 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
     else await route.fulfill({ response })
   })
   let won = false
-  for (let attempt = 0; attempt < 30; attempt++) {
-    await page.getByRole('button', { name: 'Disputar 5 × 5' }).click()
-    if (attempt === 0) await page.getByRole('button', { name: 'Recuperar partida' }).click()
-    await expect(page.locator('.stadium-athlete')).toHaveCount(10)
-    await expect(page.locator('.stadium-pitch')).toHaveAttribute('aria-label', /contra/)
-    if (attempt === 0) await page.screenshot({ path: testInfo.outputPath('m7-stadium-pitch.png') })
+  for (let duel = 0; duel < 500; duel++) {
+    await page.locator('.player-card').filter({ hasText: 'Aderlou' }).click()
+    await page.getByRole('button', { name: 'Iniciar duelo 1 × 1' }).click()
+    if (duel === 0) await page.getByRole('button', { name: 'Recuperar partida' }).click()
+    await expect(page.locator('.duelist')).toHaveCount(2)
+    await expect(page.locator('.stadium-fan')).toHaveCount(16)
+    if (duel === 0) await page.screenshot({ path: testInfo.outputPath('m7-stadium-pitch.png') })
     await page.getByRole('button', { name: 'Pular', exact: true }).click()
-    won = stadiumReceipts.at(-1)!.match.outcome === 'WIN'
-    if (won) break
-    await expect(page.locator('.coach-dialogue')).toContainText(/Treine|Experimente/)
-    await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
-    await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
-    await page.keyboard.press('e', { delay: 80 })
+    const result = stadiumReceipts.at(-1)!
+    won = Boolean(result.rewards.trophy)
+    if (won) {
+      expect(result.rewards.series.wins).toBe(5)
+      break
+    }
+    await page.getByRole('button', { name: result.rewards.series.finished ? 'Recomeçar sequência' : 'Próximo adversário' }).click()
   }
   expect(won).toBe(true)
   expect(stadiumReceipts[0]).toEqual(stadiumReceipts[1])
   expect(stadiumKeys[0]).toBe(stadiumKeys[1])
-  await expect(page.getByRole('status')).toContainText('Troféu conquistado: Taça do Benfica')
+  await expect(page.getByRole('status').filter({ hasText: 'Troféu conquistado' })).toContainText('Troféu conquistado: Taça do Benfica')
   await page.screenshot({ path: testInfo.outputPath('m7-trophy.png') })
   await page.getByRole('button', { name: 'Ver conquistas' }).click()
   await expect(page.getByRole('region', { name: 'Conquistas' })).toContainText('Taça do Benfica')
@@ -157,12 +164,15 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
   await expect(page.getByRole('region', { name: 'Conquistas' })).toContainText('Taça do Benfica')
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
   expect(await (await page.request.get('/api/v1/lineup')).json()).toEqual({ ownedPlayerIds: recruited.map(p => p.id) })
-  await walk(page, 'x', 1936)
+  await walk(page, 'y', 336)
+  await walk(page, 'x', 2128)
   await walk(page, 'y', 1320)
+  await walk(page, 'x', 1936)
   await page.keyboard.press('e', { delay: 80 })
+  await talkToStadiumCoach(page)
   await expect(page.getByRole('status')).toContainText('Conquistado')
-  await expect(page.getByRole('button', { name: 'Disputar 5 × 5' })).toHaveCount(0)
-  const blocked = await page.request.post('/api/v1/stadiums/benfica_stadium/matches', { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+  await expect(page.getByRole('button', { name: 'Iniciar duelo 1 × 1' })).toHaveCount(0)
+  const blocked = await page.request.post('/api/v1/stadiums/benfica_stadium/matches', { headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { ownedPlayerId: starter!.id, roundNumber: 1 } })
   expect(blocked.status()).toBe(409)
   expect((await blocked.json()).code).toBe('STADIUM_ALREADY_COMPLETED')
   expect(errors).toEqual([])

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApproachDialogue, canDetectChallenger, canInteract, INTERACTION_RADIUS } from './interactions'
+import { ApproachDialogue, canDetectChallenger, canInteract, CHALLENGER_DETECTION_RADIUS, INTERACTION_RADIUS } from './interactions'
 
 describe('interaction proximity', () => {
   it('allows interaction at the radius boundary', () => {
@@ -16,35 +16,34 @@ describe('interaction proximity', () => {
 it('greets once on approach and rearms only after leaving the area', () => {
   const dialogue = new ApproachDialogue()
   const npc = { x: 0, y: 0 }
-  expect(dialogue.update({ x: 100, y: 0 }, npc, 'right')).toBe(false)
-  expect(dialogue.update({ x: 60, y: 0 }, npc, 'right')).toBe(true)
-  expect(dialogue.update({ x: 40, y: 0 }, npc, 'right')).toBe(false)
-  expect(dialogue.update({ x: 65, y: 0 }, npc, 'right')).toBe(false)
-  expect(dialogue.update({ x: 59, y: 0 }, npc, 'right')).toBe(false)
-  expect(dialogue.update({ x: 81, y: 0 }, npc, 'right')).toBe(false)
-  expect(dialogue.update({ x: 50, y: 0 }, npc, 'right')).toBe(true)
+  expect(dialogue.update({ x: CHALLENGER_DETECTION_RADIUS + 25, y: 0 }, npc)).toBe(false)
+  expect(dialogue.update({ x: CHALLENGER_DETECTION_RADIUS, y: 0 }, npc)).toBe(true)
+  expect(dialogue.update({ x: 40, y: 0 }, npc)).toBe(false)
+  expect(dialogue.update({ x: CHALLENGER_DETECTION_RADIUS + 9, y: 0 }, npc)).toBe(false)
+  expect(dialogue.update({ x: CHALLENGER_DETECTION_RADIUS + 21, y: 0 }, npc)).toBe(false)
+  expect(dialogue.update({ x: CHALLENGER_DETECTION_RADIUS - 26, y: 0 }, npc)).toBe(true)
 })
 
-describe('challenger facing detection', () => {
+describe('challenger proximity detection', () => {
   const npc = { x: 100, y: 100 }
   it.each([
-    ['up', { x: 100, y: 50 }], ['down', { x: 100, y: 150 }],
-    ['left', { x: 50, y: 100 }], ['right', { x: 150, y: 100 }],
-  ] as const)('detects in front when facing %s', (facing, player) => {
-    expect(canDetectChallenger(player, npc, facing)).toBe(true)
+    { x: 100, y: 100 - CHALLENGER_DETECTION_RADIUS },
+    { x: 100, y: 100 + CHALLENGER_DETECTION_RADIUS },
+    { x: 100 - CHALLENGER_DETECTION_RADIUS, y: 100 },
+    { x: 100 + CHALLENGER_DETECTION_RADIUS, y: 100 },
+  ])('detects a player at the radius boundary at %o', player => {
+    expect(canDetectChallenger(player, npc)).toBe(true)
   })
-  it.each([
-    ['up', { x: 100, y: 150 }], ['down', { x: 100, y: 50 }],
-    ['left', { x: 150, y: 100 }], ['right', { x: 50, y: 100 }],
-    ['right', { x: 100, y: 130 }],
-  ] as const)('ignores behind or beside when facing %s', (facing, player) => {
-    expect(canDetectChallenger(player, npc, facing)).toBe(false)
+  it('uses a circular boundary beyond the manual interaction range', () => {
+    expect(CHALLENGER_DETECTION_RADIUS).toBeGreaterThan(INTERACTION_RADIUS)
+    expect(canDetectChallenger({ x: 101 + CHALLENGER_DETECTION_RADIUS, y: 100 }, npc)).toBe(false)
+    expect(canDetectChallenger({ x: 350, y: 350 }, npc)).toBe(false)
   })
   it('does not re-trigger during a single approach', () => {
     const approach = new ApproachDialogue()
-    expect(approach.update({ x: 150, y: 100 }, npc, 'right')).toBe(true)
-    expect(approach.update({ x: 140, y: 100 }, npc, 'right')).toBe(false)
-    expect(approach.update({ x: 19, y: 100 }, npc, 'right')).toBe(false)
-    expect(approach.update({ x: 121, y: 100 }, npc, 'right')).toBe(true)
+    expect(approach.update({ x: 100 + CHALLENGER_DETECTION_RADIUS, y: 100 }, npc)).toBe(true)
+    expect(approach.update({ x: 140, y: 100 }, npc)).toBe(false)
+    expect(approach.update({ x: 100 + CHALLENGER_DETECTION_RADIUS + 21, y: 100 }, npc)).toBe(false)
+    expect(approach.update({ x: 100 + CHALLENGER_DETECTION_RADIUS - 1, y: 100 }, npc)).toBe(true)
   })
 })

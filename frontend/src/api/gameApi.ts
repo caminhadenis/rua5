@@ -69,7 +69,7 @@ export interface TrainingResult {
 }
 
 export interface TrainingStatus {
-  nextAvailableAt: string | null
+  cooldowns: { ownedPlayerId: string; nextAvailableAt: string }[]
   progress: { ownedPlayerId: string; focus: TrainingFocus; completed: number }[]
 }
 
@@ -139,15 +139,18 @@ export class DuelCommand {
 
 export interface StadiumInfo {
   id: string; name: string; spawnKey: string; mapId: string
-  status: 'AVAILABLE' | 'LINEUP_INCOMPLETE' | 'LOCKED' | 'COMPLETED'
+  status: 'AVAILABLE' | 'LOCKED' | 'COMPLETED'
   missingTrophies: string[]; opponentLineup: Participant[]
   trophy: { id: string; name: string; description: string }
+  series: SeriesProgress | null
 }
+export interface SeriesProgress { id: string; played: number; wins: number; finished: boolean }
 export interface StadiumResponse {
-  match: DuelResponse['match'] & { mode: 'STADIUM_5V5'; penalties: { home: number; away: number } | null }
+  match: DuelResponse['match'] & { mode: 'STADIUM_1V1'; penalties: { home: number; away: number } | null }
   rewards: {
     players: { ownedPlayerId: string; xpAwarded: number; previousLevel: number; currentLevel: number; currentXp: number }[]
     trophy: { id: string; name: string } | null
+    series: SeriesProgress
   }
 }
 export const stadiumApi = {
@@ -157,11 +160,11 @@ export const stadiumApi = {
 
 export function parseStadium(value: StadiumResponse): StadiumResponse {
   const match = value?.match
-  if (!match || match.mode !== 'STADIUM_5V5' || match.home?.length !== 5 || match.away?.length !== 5 ||
+  if (!match || match.mode !== 'STADIUM_1V1' || match.home?.length !== 1 || match.away?.length !== 1 ||
     !['WIN', 'LOSS'].includes(match.outcome) || !Number.isInteger(match.homeScore) || match.homeScore < 0 ||
     !Number.isInteger(match.awayScore) || match.awayScore < 0 || !Array.isArray(match.events) || !match.events.length) throw new Error('Partida de estádio inválida.')
   const ids = [...match.home, ...match.away].map(p => p.playerId)
-  if (new Set(ids).size !== 10) throw new Error('Participantes inválidos.')
+  if (new Set(ids).size !== 2) throw new Error('Participantes inválidos.')
   let minute = 0
   for (const [index, event] of match.events.entries()) {
     if (event.sequence !== index + 1 || !Number.isInteger(event.minute) || event.minute < minute ||
@@ -174,18 +177,25 @@ export function parseStadium(value: StadiumResponse): StadiumResponse {
     if (!penalties || !Number.isInteger(penalties.home) || !Number.isInteger(penalties.away) ||
       penalties.home < 0 || penalties.away < 0 || penalties.home === penalties.away) throw new Error('Desempate inválido.')
   } else if (penalties !== null) throw new Error('Desempate inválido.')
-  if (value.rewards?.players?.length !== 5 || value.rewards.players.some(p => !ids.slice(0, 5).includes(p.ownedPlayerId) ||
+  if (value.rewards?.players?.length !== 1 || value.rewards.players.some(p => !ids.slice(0, 1).includes(p.ownedPlayerId) ||
     !Number.isInteger(p.xpAwarded) || p.xpAwarded < 0 || !Number.isInteger(p.currentLevel) || p.currentLevel < 1 || p.currentLevel > 15)) throw new Error('Recompensas inválidas.')
+  const series = value.rewards.series
+  if (!series || typeof series.id !== 'string' || !Number.isInteger(series.played) || series.played < 1 || series.played > 5 ||
+    !Number.isInteger(series.wins) || series.wins < 0 || series.wins > series.played ||
+    series.finished !== (match.outcome === 'LOSS' || series.played === 5) ||
+    series.wins !== series.played - (match.outcome === 'LOSS' ? 1 : 0) ||
+    Boolean(value.rewards.trophy) !== (series.wins === 5)) throw new Error('Sequência inválida.')
   return value
 }
 
 export class StadiumCommand {
-  private pending?: { id: string; key: string }
-  async play(id: string): Promise<StadiumResponse> {
-    if (!this.pending) this.pending = { id, key: crypto.randomUUID() }
-    if (this.pending.id !== id) throw new Error('Recupere a partida pendente primeiro.')
+  private pending?: { id: string; ownedPlayerId: string; seriesId: string | null; roundNumber: number; key: string }
+  async play(id: string, ownedPlayerId: string, seriesId: string | null, roundNumber: number): Promise<StadiumResponse> {
+    if (!this.pending) this.pending = { id, ownedPlayerId, seriesId, roundNumber, key: crypto.randomUUID() }
+    const pending = this.pending
+    if (pending.id !== id || pending.ownedPlayerId !== ownedPlayerId || pending.seriesId !== seriesId || pending.roundNumber !== roundNumber) throw new Error('Recupere a partida pendente primeiro.')
     try {
-      const value = parseStadium(await request<StadiumResponse>(`/stadiums/${id}/matches`, {}, this.pending.key))
+      const value = parseStadium(await request<StadiumResponse>(`/stadiums/${id}/matches`, { ownedPlayerId, seriesId, roundNumber }, pending.key))
       this.pending = undefined
       return value
     } catch (error) {

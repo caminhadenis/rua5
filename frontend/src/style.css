@@ -79,10 +79,8 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .court-lines { position: absolute; inset: 12px; border: 2px solid #95a97a55; }
 .court-lines::before { content: ''; position: absolute; left: 50%; height: 100%; border-left: 2px solid #95a97a55; }
 .court-circle { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; transform: translate(-50%, -50%); border: 2px solid #95a97a55; border-radius: 50%; }
-.duel-versus { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; font-weight: bold; color: #a4b393; }
-.duelist { position: absolute; width: 90px; height: 96px; top: 50%; transform: translate(-50%, -50%); }
-.duelist.home { left: 24%; }
-.duelist.away { left: 76%; }
+.duel-versus { display: none; }
+.duelist { position: absolute; width: 90px; height: 96px; left: var(--duelist-x, 50%); top: var(--duelist-y, 50%); transform: translate(-50%, -50%); transition: left 520ms steps(6), top 420ms steps(5); z-index: 4; }
 .duel-sprite { position: absolute; bottom: 8px; left: 13px; width: 64px; height: 80px; background-repeat: no-repeat; image-rendering: pixelated; z-index: 1; transition: translate 160ms steps(2); }
 .home .duel-sprite { background-size: 256px 240px; background-position: 0 -80px; }
 .away .duel-sprite { background-size: 64px 80px; }
@@ -90,17 +88,34 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .home.is-active .duel-platform { border-color: #f7d154; }
 .away.is-active .duel-platform { border-color: #f3987b; }
 .duelist.is-active .duel-sprite { translate: 0 -4px; }
-.duel-ball { position: absolute; top: 65%; left: 49%; width: 12px; height: 12px; background: #fff4ce; border: 3px solid #14252c; box-shadow: 2px 2px 0 #132a23; z-index: 3; }
-[data-side="home"] .duel-ball { left: 32%; }
-[data-side="away"] .duel-ball { left: 66%; }
+.duelist[data-action="carry"] .duel-sprite { animation: duel-carry 520ms steps(2) infinite; }
+.duelist[data-action="dribble"] .duel-sprite { animation: duel-dribble 620ms steps(4); }
+.duelist[data-action="stumble"] .duel-sprite { animation: duel-stumble 520ms steps(3); }
+.duelist[data-action="tackle"] .duel-sprite { animation: duel-tackle 520ms steps(3); }
+.duelist[data-action="shoot"] .duel-sprite { animation: duel-kick 560ms steps(4); transform-origin: 50% 80%; }
+.duelist[data-action="react"] .duel-sprite { animation: duel-react 520ms steps(3); }
+.duelist.away[data-action="dribble"] .duel-sprite,
+.duelist.away[data-action="tackle"] .duel-sprite,
+.duelist.away[data-action="shoot"] .duel-sprite { animation-direction: reverse; }
+@keyframes duel-carry { 0%, 100% { translate: 0 0; } 50% { translate: 0 -3px; } }
+@keyframes duel-dribble { 0%, 100% { transform: translateX(0); } 35% { transform: translate(-9px, -3px); } 70% { transform: translate(8px, 0); } }
+@keyframes duel-stumble { 0%, 100% { transform: rotate(0); } 45% { transform: translateX(8px) rotate(8deg); } }
+@keyframes duel-tackle { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(12px) rotate(7deg); } }
+@keyframes duel-kick { 0%, 100% { transform: rotate(0); } 45% { transform: translateY(-3px) rotate(-9deg); } 70% { transform: translateX(7px) rotate(11deg); } }
+@keyframes duel-react { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-5px); } }
+.duel-ball { position: absolute; top: var(--ball-y, 63%); left: var(--ball-x, 49%); width: 12px; height: 12px; translate: -50% -50%; background: #fff4ce; border: 3px solid #14252c; box-shadow: 2px 2px 0 #132a23; z-index: 6; transition: left 420ms steps(5), top 320ms steps(4); }
+.duel-ball[data-owner="home"] { animation: ball-carry-home 520ms steps(2) infinite; }
+.duel-ball[data-owner="away"] { animation: ball-carry-away 520ms steps(2) infinite; }
+@keyframes ball-carry-home { 50% { translate: 5px -7px; } }
+@keyframes ball-carry-away { 50% { translate: -5px -7px; } }
 .duel-ball[data-shot="home"] { animation: shot-home 680ms steps(8) forwards; }
 .duel-ball[data-shot="away"] { animation: shot-away 680ms steps(8) forwards; }
 .duel-ball[data-shot="home-miss"] { animation: shot-miss-home 560ms steps(7) forwards; }
 .duel-ball[data-shot="away-miss"] { animation: shot-miss-away 560ms steps(7) forwards; }
 .duel-ball[data-shot="home-save"] { animation: shot-save-home 500ms steps(6) forwards; }
 .duel-ball[data-shot="away-save"] { animation: shot-save-away 500ms steps(6) forwards; }
-@keyframes shot-home { to { left: calc(100% - 20px); top: 48%; } }
-@keyframes shot-away { to { left: 9px; top: 48%; } }
+@keyframes shot-home { to { left: calc(100% - 20px); top: 48%; translate: -50% -50%; } }
+@keyframes shot-away { to { left: 9px; top: 48%; translate: -50% -50%; } }
 @keyframes shot-miss-home { to { left: 88%; top: 9%; } }
 @keyframes shot-miss-away { to { left: 12%; top: 9%; } }
 @keyframes shot-save-home { to { left: 86%; top: 48%; } }
@@ -139,18 +154,18 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
   .duel-reward { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .duel-sprite, .duel-ball { transition: none; }
+  .duelist, .duel-sprite, .duel-ball { transition: none; animation-duration: 1ms !important; }
 }
-.duelist[data-emotion="happy"] .duel-sprite,
-.duelist[data-emotion="sad"] .duel-sprite { background-size: 128px 160px; }
-.duelist.home[data-emotion="happy"] .duel-sprite { background-position: 0 0; }
-.duelist.away[data-emotion="happy"] .duel-sprite { background-position: 0 -80px; }
-.duelist.home[data-emotion="sad"] .duel-sprite { background-position: -64px 0; }
-.duelist.away[data-emotion="sad"] .duel-sprite { background-position: -64px -80px; translate: 0 2px; }
+.duelist[data-pose-sheet="emotion"][data-emotion="happy"] .duel-sprite,
+.duelist[data-pose-sheet="emotion"][data-emotion="sad"] .duel-sprite { background-size: 128px 160px; }
+.duelist[data-pose-sheet="emotion"][data-emotion="happy"] .duel-sprite { background-position: 0 0; }
+.duelist[data-pose-sheet="emotion"][data-emotion="sad"] .duel-sprite { background-position: -64px 0; translate: 0 2px; }
 .duelist[data-emotion="happy"] .duel-sprite { animation: goal-celebration 650ms steps(3) 2; }
+.duelist[data-pose-sheet="base"][data-emotion="sad"] .duel-sprite { animation: duel-defeat 700ms steps(3) forwards; transform-origin: 50% 80%; }
 .duelist[data-emotion="happy"] .duel-platform { border-color: #f7d154; }
 .duelist[data-emotion="sad"] .duel-platform { border-color: #68817a; }
 @keyframes goal-celebration { 0%, 100% { translate: 0 0; } 50% { translate: 0 -7px; } }
+@keyframes duel-defeat { to { translate: 0 3px; transform: rotate(5deg); filter: saturate(.65); } }
 @media (prefers-reduced-motion: reduce) {
   .duelist[data-emotion="happy"] .duel-sprite { animation: none; }
 }
@@ -397,3 +412,51 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .team-color-fields { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-bottom: 12px; }
 .team-color-fields label { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .team-color-fields input[type="color"] { width: 58px; height: 44px; padding: 3px; cursor: pointer; }
+.stadium-duel-panel { inset: 2% max(4%, calc((100% - 880px) / 2)); padding: 8px 20px; gap: 4px; }
+.stadium-duel-panel .duel-score { font-size: 36px; padding: 4px 20px; }
+.stadium-duel-panel .duel-scoreboard { padding: 0; gap: 10px; }
+.stadium-duel-panel .duel-player strong { font-size: 20px; }
+.stadium-duel-panel .duel-player small { font-size: 9px; }
+.stadium-duel-panel .duel-commentary { padding: 7px 12px; }
+.stadium-duel-panel .duel-controls button { padding: 6px 14px; }
+.duel-penalties { grid-column: 1 / -1; color: #f7d154; text-align: center; font-size: 12px; }
+.duel-penalties:empty { display: none; }
+.stadium-theater { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px; grid-template-rows: 80px minmax(140px, 1fr) 80px; grid-template-areas: 'top top top' 'left court right' 'bottom bottom bottom'; flex: 1 0 300px; min-height: 300px; }
+.stadium-theater .duel-arena { grid-area: court; height: 100%; min-height: 140px; max-height: none; flex: none; border: 3px solid #b3c4a2; }
+.stadium-stand { position: relative; display: flex; align-items: center; justify-content: space-around; overflow: hidden; pointer-events: none; background: repeating-linear-gradient(#23313b 0 22px, #465461 22px 25px); border: 2px solid #596779; }
+.stand-top { grid-area: top; }
+.stand-bottom { grid-area: bottom; }
+.stand-left { grid-area: left; flex-direction: column; }
+.stand-right { grid-area: right; flex-direction: column; }
+.stadium-fan { position: relative; display: block; flex: 0 0 56px; width: 56px; height: 70px; animation: fan-bounce 1s ease-in-out infinite; animation-delay: var(--cheer-delay); }
+.fan-avatar { display: block; width: 56px; height: 70px; image-rendering: pixelated; overflow: hidden; }
+.fan-arm { transform-box: view-box; animation: fan-arm-wave .7s ease-in-out infinite alternate; animation-delay: var(--cheer-delay); }
+.arm-left { transform-origin: 8px 20px; }
+.arm-right { transform-origin: 25px 20px; animation-direction: alternate-reverse; }
+.fan-flag { position: absolute; left: 32px; top: 6px; width: 24px; height: 18px; background: linear-gradient(#984f47 50%, #f5ead2 50%); border-left: 3px solid #d8bd82; transform-origin: bottom left; animation: fan-flag-wave .7s ease-in-out infinite alternate; animation-delay: var(--cheer-delay); }
+.fan-flag::after { content: ''; position: absolute; left: -3px; top: 0; width: 3px; height: 40px; background: #d8bd82; }
+.stadium-support-banner { position: absolute; bottom: 0; left: 35%; padding: 2px 8px; color: #f5ead2; background: #984f47; border: 2px solid #f5ead2; font: bold 11px monospace; animation: fan-banner-sway 1.4s ease-in-out infinite alternate; }
+.stadium-panel .coach-portrait { flex-basis: 96px; width: 96px; height: 120px; background-size: 96px 120px; }
+.coach-result-panel { justify-content: center; }
+.coach-result-panel .coach-dialogue { padding: 20px; gap: 24px; }
+.coach-result-panel .coach-portrait { flex-basis: 128px; width: 128px; height: 160px; background-size: 128px 160px; }
+.coach-result-panel .coach-lines p { font-size: 18px; }
+.coach-result-panel > p { margin: 4px 0; text-align: center; }
+.stadium-next-opponent { color: #f7d154; font-weight: bold; }
+@keyframes fan-bounce { 50% { transform: translateY(-2px); } }
+@keyframes fan-arm-wave { from { transform: rotate(-20deg); } to { transform: rotate(150deg); } }
+@keyframes fan-flag-wave { from { transform: rotate(-10deg) skewY(-4deg); } to { transform: rotate(10deg) skewY(4deg); } }
+@keyframes fan-banner-sway { from { transform: rotate(-1deg); } to { transform: rotate(1deg); } }
+@media (max-width: 600px) {
+  .stadium-duel-panel { inset: 2%; padding: 8px; }
+  .stadium-theater { grid-template-columns: 48px minmax(0, 1fr) 48px; grid-template-rows: 64px minmax(140px, 1fr) 64px; min-height: 268px; flex-basis: 268px; }
+  .stadium-fan { flex-basis: 40px; width: 40px; height: 50px; }
+  .fan-avatar { width: 40px; height: 50px; }
+  .fan-flag { left: 22px; width: 18px; height: 14px; }
+  .coach-result-panel .coach-dialogue { padding: 10px; gap: 12px; }
+  .coach-result-panel .coach-portrait { flex-basis: 80px; width: 80px; height: 100px; background-size: 80px 100px; }
+  .coach-result-panel .coach-lines p { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stadium-fan, .fan-arm, .fan-flag, .stadium-support-banner { animation: none; }
+}

@@ -1,21 +1,32 @@
 import type Phaser from 'phaser'
 import playerUrl from '../../assets/placeholders/player.svg?no-inline'
 import challengerUrl from '../../assets/placeholders/challenger.svg?no-inline'
+import challengerCurlsUrl from '../../assets/placeholders/challenger-curls.svg?no-inline'
+import challengerHeadbandUrl from '../../assets/placeholders/challenger-headband.svg?no-inline'
 import emotionsUrl from '../../assets/placeholders/duel-emotions.svg?no-inline'
 import playerSvg from '../../assets/placeholders/player.svg?raw'
 import challengerSvg from '../../assets/placeholders/challenger.svg?raw'
+import challengerCurlsSvg from '../../assets/placeholders/challenger-curls.svg?raw'
+import challengerHeadbandSvg from '../../assets/placeholders/challenger-headband.svg?raw'
 import emotionsSvg from '../../assets/placeholders/duel-emotions.svg?raw'
 
 export interface TeamColors { primaryColor: string; secondaryColor: string }
 export const DEFAULT_TEAM_COLORS: TeamColors = { primaryColor: '#f7d154', secondaryColor: '#24354a' }
-export const originalUniformUrls = { player: playerUrl, challenger: challengerUrl, 'duel-emotions': emotionsUrl }
-type UniformAsset = 'player' | 'challenger' | 'duel-emotions'
+export const originalUniformUrls = {
+  player: playerUrl, challenger: challengerUrl, 'challenger-curls': challengerCurlsUrl,
+  'challenger-headband': challengerHeadbandUrl, 'duel-emotions': emotionsUrl,
+}
+export type ChallengerAsset = 'challenger' | 'challenger-curls' | 'challenger-headband'
+type UniformAsset = 'player' | ChallengerAsset | 'duel-emotions'
 const starterFeatures: Record<string, { skin: string; hair: string }> = {
   starter_leo: { skin: '#c58b61', hair: '#654335' },
   starter_rafa: { skin: '#986445', hair: '#d8a83e' },
   starter_breno: { skin: '#e3af81', hair: '#111820' },
 }
-const sources = { player: playerSvg, challenger: challengerSvg, 'duel-emotions': emotionsSvg }
+const sources = {
+  player: playerSvg, challenger: challengerSvg, 'challenger-curls': challengerCurlsSvg,
+  'challenger-headband': challengerHeadbandSvg, 'duel-emotions': emotionsSvg,
+}
 let currentColors = DEFAULT_TEAM_COLORS
 const urls = new Map<string, string>()
 
@@ -29,8 +40,13 @@ export function uniformSvg(asset: UniformAsset, colors: TeamColors): string {
     return source.replace(/--shirt:#[0-9a-f]{6}/g, `--shirt:${colors.primaryColor}`)
       .replace(/--(?:trim|shorts):#[0-9a-f]{6}/g, match => `${match.split(':')[0]}:${colors.secondaryColor}`)
   }
-  const primary = asset === 'player' ? '#f7d154' : '#de725a'
-  const secondary = asset === 'player' ? ['#e6ae3b', '#24354a', '#1b293a'] : ['#ad5146']
+  const palettes: Record<Exclude<UniformAsset, 'duel-emotions'>, { primary: string; secondary: string[] }> = {
+    player: { primary: '#f7d154', secondary: ['#e6ae3b', '#24354a', '#1b293a'] },
+    challenger: { primary: '#de725a', secondary: ['#ad5146'] },
+    'challenger-curls': { primary: '#5d9c74', secondary: ['#e0d7a6', '#f5ead2'] },
+    'challenger-headband': { primary: '#536d9d', secondary: ['#f7d154', '#aebbd0'] },
+  }
+  const { primary, secondary } = palettes[asset]
   // One pass prevents a chosen color matching an original color from being replaced twice.
   source = source.replace(/fill="(#[0-9a-f]{6})"/g, (match, color: string) =>
     color === primary ? `fill="${colors.primaryColor}"` : secondary.includes(color) ? `fill="${colors.secondaryColor}"` : match)
@@ -38,6 +54,23 @@ export function uniformSvg(asset: UniformAsset, colors: TeamColors): string {
     source = source.replace('fill="#f5ead2" d="M9 27', `fill="${colors.secondaryColor}" d="M9 27`)
   }
   return source
+}
+
+const challengerAppearances: Record<string, ChallengerAsset> = {
+  npc_nilo_01: 'challenger', npc_cora_01: 'challenger-curls', npc_davi_01: 'challenger-headband',
+  npc_bia_01: 'challenger', npc_rui_01: 'challenger-curls', npc_sol_01: 'challenger-headband',
+  npc_teca_01: 'challenger', npc_zeca_01: 'challenger-curls', npc_iris_01: 'challenger-headband',
+  npc_bento_01: 'challenger', npc_lua_01: 'challenger-curls', npc_caue_01: 'challenger-headband',
+  npc_nina_01: 'challenger', npc_beto_01: 'challenger-curls', npc_joca_01: 'challenger-headband',
+  npc_maiara_01: 'challenger',
+}
+
+export function challengerAsset(id: string | undefined): ChallengerAsset {
+  return id ? challengerAppearances[id] ?? 'challenger' : 'challenger'
+}
+
+export function originalChallengerUrl(id: string | undefined): string {
+  return originalUniformUrls[challengerAsset(id)]
 }
 
 export function uniformUrl(asset: UniformAsset, colors: TeamColors = currentColors): string {
@@ -59,6 +92,31 @@ export function starterUniformUrl(id: string, colors: TeamColors = currentColors
     const svg = uniformSvg('player', colors)
       .replaceAll('#c58b61', features.skin).replaceAll('#293139', features.hair)
       .replaceAll('data-starter-mustache=""', id === 'starter_leo' ? 'fill="#3b291f"' : 'display="none"')
+    url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    urls.set(key, url)
+  }
+  return url
+}
+
+/** Resolve an owned athlete's uniform without losing the visual identity of starters. */
+export function ownedPlayerUniformUrl(id: string | undefined, colors: TeamColors = currentColors): string {
+  if (id?.startsWith('starter_')) return starterUniformUrl(id, colors)
+  return uniformUrl(id?.startsWith('npc_') ? challengerAsset(id) : 'player', colors)
+}
+
+/** Keep a starter's skin and hair in the emotional poses used at the end of a duel. */
+export function ownedPlayerEmotionUrl(id: string | undefined, colors: TeamColors = currentColors): string {
+  if (!id?.startsWith('starter_')) return uniformUrl('duel-emotions', colors)
+  const features = starterFeatures[id]
+  if (!features) throw new Error(`Unknown starter: ${id}`)
+  const key = `starter-emotions:${id}:${colors.primaryColor}:${colors.secondaryColor}`
+  let url = urls.get(key)
+  if (!url) {
+    const mustache = id === 'starter_leo' ? '#3b291f' : 'transparent'
+    const svg = uniformSvg('duel-emotions', colors)
+      .replace('--skin:#c58b61', `--skin:${features.skin}`)
+      .replace('--hair:#293139', `--hair:${features.hair}`)
+      .replace('--mustache:transparent', `--mustache:${mustache}`)
     url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
     urls.set(key, url)
   }

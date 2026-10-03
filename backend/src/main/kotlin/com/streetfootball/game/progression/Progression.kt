@@ -61,7 +61,10 @@ object Progression {
         require(level in 1..MAX_LEVEL)
         val growth = level - 1
 
-        fun grow(stat: Int, bonus: Int) = (stat + growth + bonus).coerceIn(1, 99)
+        fun grow(
+            stat: Int,
+            bonus: Int,
+        ) = (stat + growth + bonus).coerceIn(1, 99)
         return MatchStats(
             grow(base.speed, bonuses.speed),
             grow(base.dribbling, bonuses.dribbling),
@@ -81,7 +84,9 @@ data class StatBonuses(
     val defending: Int = 0,
     val physical: Int = 0,
 ) {
-    init { require(listOf(speed, dribbling, passing, finishing, defending, physical).all { it in 0..98 }) }
+    init {
+        require(listOf(speed, dribbling, passing, finishing, defending, physical).all { it in 0..98 })
+    }
 }
 
 data class LevelProgress(

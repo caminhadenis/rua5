@@ -1,11 +1,11 @@
 package com.streetfootball.game.progression
 
+import com.streetfootball.game.match.domain.MatchStats
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import com.streetfootball.game.match.domain.MatchStats
 
 class TrainingPolicyTest {
     @Test

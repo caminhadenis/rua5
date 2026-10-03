@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { starterUniformUrl, uniformSvg } from './teamColors'
+import { challengerAsset, originalChallengerUrl, ownedPlayerEmotionUrl, ownedPlayerUniformUrl, starterUniformUrl, uniformSvg } from './teamColors'
 
 describe('team uniforms', () => {
   const colors = { primaryColor: '#2266aa', secondaryColor: '#dd3344' }
@@ -21,6 +21,14 @@ describe('team uniforms', () => {
     expect(aderlo).toContain('fill="#111820"')
     expect(loraco).toContain('fill="#d8a83e"')
   })
+  it('keeps Loraco blond in owned-player cards and emotional duel poses', () => {
+    expect(decodeURIComponent(ownedPlayerUniformUrl('starter_rafa', colors))).toContain('fill="#d8a83e"')
+    expect(decodeURIComponent(ownedPlayerEmotionUrl('starter_rafa', colors))).toContain('--hair:#d8a83e')
+  })
+  it('keeps Cabeleira mustached in emotional duel poses', () => {
+    expect(decodeURIComponent(ownedPlayerEmotionUrl('starter_leo', colors))).toContain('--mustache:#3b291f')
+    expect(decodeURIComponent(ownedPlayerEmotionUrl('starter_breno', colors))).toContain('--mustache:transparent')
+  })
   it('dresses starters and recruits without changing skin or hair', () => {
     const starter = uniformSvg('player', colors)
     expect(starter).toContain('fill="#2266aa"')
@@ -33,6 +41,16 @@ describe('team uniforms', () => {
     expect(recruit).toContain('fill="#986445"')
     expect(recruit).toContain('fill="#312d35"')
     expect(recruit).not.toContain('#de725a')
+  })
+  it('uses the same physical appearance for each challenger on the map and in matches', () => {
+    expect(challengerAsset('npc_nilo_01')).toBe('challenger')
+    expect(challengerAsset('npc_cora_01')).toBe('challenger-curls')
+    expect(challengerAsset('npc_davi_01')).toBe('challenger-headband')
+    expect(originalChallengerUrl('npc_cora_01')).not.toBe(originalChallengerUrl('npc_nilo_01'))
+    const recruitedCora = decodeURIComponent(ownedPlayerUniformUrl('npc_cora_01', colors))
+    expect(recruitedCora).toContain('fill="#9e6246"')
+    expect(recruitedCora).toContain('fill="#242533"')
+    expect(recruitedCora).toContain('fill="#2266aa"')
   })
   it('preserves colors in both sets of celebration and defeat poses', () => {
     const emotions = uniformSvg('duel-emotions', colors)

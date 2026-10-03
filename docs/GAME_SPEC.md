@@ -32,7 +32,7 @@ Um RPG de futebol com exploração de cidade em pixel art.
 
 O jogador controla um personagem que anda por bairros, encontra jogadores em quadras e ruas, desafia esses NPCs em duelos individuais, recruta novos atletas e evolui seu elenco.
 
-Ao reunir um time suficientemente forte, o jogador disputa partidas 5x5 em estádios. Cada estádio concede um troféu e libera progressivamente níveis maiores da jornada:
+Ao preparar seus atletas, o jogador enfrenta cinco duelos 1x1 consecutivos em cada estádio. Cada treinador possui cinco jogadores, com o mais forte por último. Vencer todos na mesma tentativa concede um troféu e libera progressivamente níveis maiores da jornada; uma derrota exige recomeçar pelo primeiro rival:
 
 ```text
 bairro
@@ -148,13 +148,13 @@ desbloquear recrutamento
   ↓
 recrutar jogadores
   ↓
-montar lineup com 5
+preparar um atleta do elenco
   ↓
-entrar no estádio do bairro
+entrar no estádio do bairro e caminhar até o treinador
   ↓
-simular 5x5
+simular cinco duelos 1x1, escolhendo um atleta por jogo
   ↓
-vencer
+vencer todos consecutivamente
   ↓
 ganhar troféu
   ↓
@@ -708,9 +708,11 @@ A fórmula final deve ser testável e centralizada.
 ## 11.5 Centro de treinamento
 
 O prédio `benfica.gym.entry` abriga o centro de treinamento do Benfica. O jogador entra
-no edifício, percorre seis setores com atletas treinando e conversa com o treinador de
-cada setor. Cada setor oferece um fundamento fixo (velocidade, drible, passe,
-finalização, marcação ou físico); a tela de treino permite escolher um atleta próprio.
+no edifício, percorre seis setores e conversa com um único treinador em cada setor.
+Cada setor oferece um fundamento fixo (velocidade, drible, passe, finalização, marcação
+ou físico); a mensagem do treinador pergunta se o jogador quer treinar e informa
+“Clique Enter para treinar”. Enter abre a tela de escolha de um atleta próprio. O diálogo
+fica em uma faixa compacta no alto da tela, fora da área do personagem.
 O frontend apresenta o atleta escolhido por cinco segundos na atividade correspondente:
 esteira, três cones, troca de passes, chutes a gol, perseguição ou musculação. Apenas um
 treino pode ocorrer por vez. Cada sessão soma 1/5 para o fundamento daquele atleta; só a
@@ -719,7 +721,8 @@ menor que 99. As sessões parciais não alteram atributos, nível ou desempenho 
 O progresso restante é mostrado na tela de treino, e a treinadora da academia explica
 a regra em diálogo automático quando o jogador entra no prédio. O treino só pode ser
 iniciado após conversar com o treinador do setor correspondente. O backend aplica
-um intervalo de um minuto por perfil entre treinos, inclusive com atletas diferentes.
+um intervalo de um minuto por atleta; outro atleta do mesmo perfil pode treinar
+imediatamente. O status retorna o próximo horário disponível por `ownedPlayerId`.
 O comando usa `Idempotency-Key`; retry retorna o mesmo resultado sem reaplicar bônus.
 O backend deriva o perfil da sessão, valida a posse e persiste o bônus. Os snapshots de
 duelos e estádio passam a usar esse bônus; partidas históricas não mudam. Treinos não
@@ -796,8 +799,7 @@ desafiantes: Nilo → Cora → Davi → Bia → Rui → Sol → Teca → Zeca. A
 desafiante ao estádio diminui conforme a dificuldade aumenta. Interiores possuem
 plantas, móveis, cores e posições de moradores diferentes. Os moradores apresentam
 progressivamente o professor Dimas (antigo professor de educação física, conhecido
-pelo cronômetro) e a escalação real do estádio: Íris e Tito na defesa, Lia nos passes,
-Ivo no drible e Mara na finalização. Essas falas são apresentação estática; a escalação
+pelo cronômetro) e os cinco rivais do estádio: Íris, Tito, Lia, Ivo e Mara, em duelos individuais. Essas falas são apresentação estática; a escalação
 da partida continua vindo do backend.
 
 ## 12.3 Revanche
@@ -853,49 +855,16 @@ UNIQUE(profile_id, player_definition_id)
 
 O elenco total MAY ser maior que 5.
 
-O lineup ativo possui exatamente 5 slots quando o jogador desejar entrar no estádio.
+O editor de lineup mantém cinco slots opcionais. Ele não é requisito de acesso e não controla nenhum jogo; todas as novas partidas usam um atleta por lado.
 
 ---
 
-# 14. Lineup 5x5
+# 14. Elenco e seleção individual
 
-## 14.1 MVP
-
-O MVP usa cinco jogadores e **não possui goleiro explícito**.
-
-O goleiro é abstraído pelo Match Engine.
-
-Isso reduz escopo e permite que todos os personagens recrutáveis participem tanto de duelos quanto de jogos de estádio.
-
-## 14.2 Roles
-
-Roles sugeridas:
-
-- `DEFENDER`
-- `MIDFIELDER`
-- `ATTACKER`
-
-Um jogador possui `preferredRole`.
-
-O lineup MAY conter qualquer combinação no MVP, mas uma composição balanceada pode receber pequeno bônus.
-
-Exemplo:
-
-```text
->= 1 defender
->= 1 midfielder
->= 1 attacker
-```
-
-Resultado:
-
-```text
-teamBalanceBonus = pequeno
-```
-
-Nunca criar um bônus tão grande que torne a composição obrigatória sem explicar ao usuário.
-
----
+O elenco pode conter vários atletas. Antes de cada duelo de rua ou estádio, o jogador
+escolhe um único OwnedPlayer. Pode usar o mesmo atleta nos cinco jogos do estádio ou
+trocar entre duelos. Roles continuam descrevendo os atletas, sem posições simultâneas
+ou bônus de composição em partidas. O editor legado de cinco slots permanece opcional.
 
 # 15. Estádios e troféus
 
@@ -948,23 +917,27 @@ Não escrever cadeia de `if` hardcoded por estádio.
 
 Antes de iniciar partida:
 
-- lineup deve ter 5;
+- atleta escolhido deve pertencer ao perfil da sessão;
 - requisitos devem estar atendidos;
 - estádio não pode já estar concluído;
 - perfil deve ter acesso à área.
 
 Backend MUST validar tudo.
 
-## 15.5 Vitória
+## 15.5 Sequência e troféu
 
-Ao vencer:
+Cada treinador possui exatamente cinco jogadores. O backend ordena por nível e soma
+dos seis atributos efetivos, com ID estável para desempatar; o mais forte fica por último.
+O início da tentativa persiste esses snapshots para manter a ordem após reload.
 
-- criar troféu do usuário;
-- marcar estádio como concluído implicitamente pela existência do troféu;
-- aplicar XP/recompensas;
-- desbloquear conteúdo dependente.
+Cada partida é 1x1. Vitória avança para o próximo adversário. Uma derrota encerra
+imediatamente a tentativa; o próximo comando válido cria outra, desde o primeiro rival.
+Somente cinco vitórias consecutivas na mesma tentativa concedem o troféu.
+Empate regulamentar tem desempate determinístico por pênaltis no estádio.
 
-As operações MUST ser transacionais.
+Cada duelo aplica XP/histórico somente ao atleta que participou. XP decai pelo número
+de duelos já disputados no estádio. Partida, avanço, XP e eventual troféu são transacionais.
+Uma tentativa ativa pode ser retomada ao sair/entrar ou recarregar.
 
 ## 15.6 Repetição
 
@@ -1027,10 +1000,10 @@ MatchResult
 
 ```text
 DUEL_1V1
-STADIUM_5V5
+STADIUM_1V1
 ```
 
-O engine MAY possuir implementações internas diferentes, mas deve compartilhar primitivas sempre que fizer sentido.
+Novos jogos sempre possuem um participante por lado. O modo histórico `STADIUM_5V5` v2 é preservado somente para ler e reproduzir snapshots antigos; nenhum endpoint cria partidas nesse modo.
 
 ## 16.4 Primitivas
 
@@ -1109,41 +1082,15 @@ Duração visual alvo:
 
 O backend MAY simular tudo em milissegundos.
 
-## 16.7 5x5
+## 16.7 Duelo de estádio
 
-Não simular física.
+`STADIUM_1V1` v3 usa a simulação regulamentar do duelo v1 e acrescenta pênaltis
+determinísticos quando necessário. Sempre há um vencedor. Os pênaltis são eventos
+separados de `GOAL` e não mudam o placar regulamentar.
 
-Em cada posse:
+## 16.8 Compatibilidade histórica
 
-1. selecionar jogador de construção ponderado por passing/dribbling;
-2. selecionar defensor ponderado por defending/physical;
-3. resolver passe ou duelo;
-4. avançar zona abstrata;
-5. selecionar finalizador;
-6. resolver chute contra defesa coletiva + goleiro abstrato;
-7. emitir eventos com nomes reais.
-
-O usuário deve perceber que os cinco jogadores importam.
-
-## 16.8 Goleiro abstrato
-
-No MVP:
-
-```text
-keeperStrength =
-baseKeeperStrength
-+ teamDefensiveContribution
-```
-
-`baseKeeperStrength` varia por dificuldade do time adversário/estádio.
-
-Para o time do jogador, o valor pode ser derivado de:
-
-```text
-defending + physical + team balance
-```
-
-No futuro, goleiro explícito MAY substituir esse modelo.
+O engine 5x5 v2 e suas regras antigas permanecem apenas para resultados históricos.
 
 ## 16.9 Empate
 
@@ -1262,13 +1209,18 @@ rollback
 
 ## 17.2 Estádio
 
-Passos adicionais:
+- obter o perfil sob lock;
+- recuperar comando idempotente antes das validações mutáveis;
+- validar acesso, requisitos, ausência de troféu e ownership do atleta;
+- validar `seriesId` e `roundNumber` contra a última tentativa;
+- iniciar tentativa se a anterior terminou, salvando os cinco oponentes ordenados;
+- simular um duelo com o próximo adversário;
+- persistir partida, XP/histórico individual e avanço/derrota;
+- na quinta vitória consecutiva, conceder troféu;
+- commit e devolver resultado com progresso da tentativa.
 
-- validar 5 jogadores;
-- validar requisitos;
-- validar que troféu ainda não existe;
-- carregar time adversário;
-- após vitória criar troféu.
+Comando de tela desatualizada recebe `STADIUM_SEQUENCE_CHANGED`; uma chave repetida
+recupera o resultado original sem reaplicar qualquer efeito.
 
 ---
 
@@ -1732,17 +1684,29 @@ POST /api/v1/stadiums/{id}/matches
 Idempotency-Key: <uuid>
 ```
 
-Não precisa enviar lineup se backend usar lineup ativo persistido.
+Corpo obrigatório:
 
-Response semelhante ao duelo, adicionando troféu quando aplicável.
+```json
+{
+  "ownedPlayerId": "...",
+  "seriesId": null,
+  "roundNumber": 1
+}
+```
 
-Contrato implementado no M6: `match.penalties` contém `{home, away}` apenas no desempate;
-`homeScore`/`awayScore` e eventos `GOAL` representam o tempo regulamentar. `PENALTY_GOAL`
-e `PENALTY_MISSED` representam cobranças; `outcome` sempre tem vencedor no estádio.
-`rewards.players` contém XP/nível de cada escalado e `rewards.trophy` contém a definição
-conquistada ou `null`. Retry com a chave original precede as validações de disponibilidade;
-chave nova após conquista retorna `STADIUM_ALREADY_COMPLETED`. Detalhes de balanceamento,
-versionamento e persistência estão em `docs/decisions/ADR-0004-stadium-matches.md`.
+`GET /stadiums/{id}` retorna `opponentLineup` na ordem dos cinco duelos e `series`
+com `id`, `played`, `wins`, `finished`, ou `null` antes da primeira tentativa.
+Os status são `AVAILABLE`, `LOCKED` e `COMPLETED`, sem requisito de lineup.
+O POST envia o ID da última tentativa consultada; após derrota, `roundNumber` volta
+a 1 e o servidor cria um novo ID. Em tentativa ativa, a rodada é `played + 1`.
+
+Resposta: `match.mode = STADIUM_1V1`, um participante por lado,
+`match.penalties` apenas no desempate e `outcome` WIN/LOSS.
+`rewards.players` possui somente o atleta que jogou; `rewards.series` informa
+o avanço; `rewards.trophy` só existe na quinta vitória consecutiva.
+Retry com a chave original precede validações de disponibilidade; chave nova após
+conquista retorna `STADIUM_ALREADY_COMPLETED`.
+Ver `docs/decisions/ADR-0008-stadium-duel-series.md`.
 
 ## 20.13 Histórico
 
@@ -2101,9 +2065,15 @@ recrutamentos futuros; histórico e atletas já recrutados preservam seus valore
 
 ## 29.1 Tela
 
-O duelo 1x1 usa apresentação de RPG com sprites frente a frente na quadra, placar
-atual em destaque e **apenas um lance por vez, em uma única linha**. A fala do NPC
-abre automaticamente ao se aproximar; iniciar o desafio continua sendo uma ação explícita.
+O duelo 1x1 usa apresentação de RPG com uma simulação visual dirigida pelos eventos
+autoritativos: os atletas percorrem diferentes faixas da quadra, a bola acompanha quem
+tem a posse e dribles, desarmes, chutes, defesas e gols recebem coreografias próprias.
+Essa encenação não recalcula física, resultado ou placar. O placar atual fica em destaque
+e há **apenas um lance por vez, em uma única linha**. A fala do NPC abre automaticamente
+ao se aproximar; iniciar o desafio continua sendo uma ação explícita.
+O desafiante MUST conservar na seleção, no duelo e nas poses finais o mesmo corpo, pele,
+cabelo e uniforme original com que aparece no mapa. Se recrutado, conserva corpo, pele e
+cabelo e troca somente a roupa pelas cores do time do perfil.
 
 ```text
 ┌─────────────────────────────────────────┐
@@ -2125,13 +2095,26 @@ na velocidade normal e ao menos 0,9 segundos ao acelerar, inclusive no último g
 Pular leva diretamente ao resultado. No fim, o vencedor fica feliz e o perdedor
 cabisbaixo; empate mantém poses neutras.
 
-No estádio 5x5, o professor Dimas conversa antes da partida e comenta o resultado.
-Durante o playback, a quadra mostra os dez atletas da escalação em lados opostos; o
-autor do evento avança até a bola. Os desenhos, movimentos e comentários são apenas
-apresentação dos dados retornados pelo backend. Na vitória, Dimas entrega o troféu
-persistido e o jogador pode consultá-lo em Conquistas na tela Equipe, inclusive após
-recarregar. Na derrota, Dimas aponta um lance observado e sugere treino ou mudança de
-escalação; o conselho não altera a simulação nem concede recompensas.
+Entrar no estádio abre um interior explorável com o avatar junto à entrada. O jogador
+caminha até Dimas e conversa para abrir a seleção de um atleta e iniciar o próximo duelo.
+Torcedores da casa apoiam os atletas de Dimas e torcem contra o visitante; suas falas
+não iniciam partidas ou concedem recompensas.
+
+O playback mostra somente dois atletas na quadra. Ao redor há avatares de torcedores
+maiores, com rostos, uniformes e animações de braços, bandeiras e faixas nas cores
+vermelho/creme do estádio. A torcida ocupa arquibancadas separadas nos quatro lados;
+nem torcedores nem acessórios podem sobrepor a superfície de jogo, inclusive em telas
+estreitas. Dimas não aparece durante o desafio.
+
+Ao terminar cada duelo, a quadra é substituída pela tela de conversa com o retrato de
+Dimas. Na vitória, ele elogia o desempenho e apresenta pelo nome o próximo adversário
+retornado pelo backend; antes do quinto duelo, avisa que é seu melhor atleta. Confirmar
+“Próximo adversário” abre a escolha do jogador do usuário; iniciar corta para a quadra
+com esses dois atletas. Na derrota, explica que será preciso recomeçar. A conversa
+mostra placar, XP e avanço autoritativos. Só a quinta vitória entrega a taça, visível em
+Conquistas após reload.
+Na derrota, a interface oferece recomeçar desde o primeiro rival. Há retorno ao
+interior entre duelos. Animações e comentários não alteram a simulação.
 
 ## 29.2 Timing
 
@@ -2224,10 +2207,13 @@ Obrigatórios:
 
 ### Stadium rules
 
-- lineup < 5 rejeitado;
+- um atleta próprio é suficiente, independentemente do lineup;
 - requisito ausente rejeitado;
 - já vencido rejeitado;
-- vitória concede trophy.
+- quinta vitória consecutiva concede trophy;
+- derrota encerra tentativa e próximo duelo reinicia pelo primeiro rival;
+- ordem persistida e mais forte por último;
+- retry não avança outra rodada; comando desatualizado é rejeitado.
 
 ### Recruitment
 
@@ -2528,24 +2514,27 @@ NPC
 
 ---
 
-## Milestone 6 — Estádio 5x5
+## Milestone 6 — Estádio com sequência 1x1
 
 ### Entregas
 
-- stadium;
-- opponent lineup;
-- engine 5x5;
-- requisito lineup 5;
-- trophy;
-- estádio bloqueado após vitória.
+- treinador com cinco oponentes, ordenados do mais fraco ao mais forte;
+- duelos individuais, engine v3 com desempate;
+- tentativa persistida por perfil/estádio;
+- escolha individual de atleta, sem exigir lineup;
+- cinco vitórias consecutivas concedem troféu;
+- derrota encerra tentativa e exige recomeçar;
+- estádio bloqueado após conquista.
 
 ### Aceite
 
 ```text
-lineup 4 -> rejeitado
-lineup 5 -> permitido
-vitória -> trophy
-segunda tentativa -> rejeitada
+um atleta próprio -> permitido
+quatro vitórias -> sem troféu
+quinta vitória consecutiva -> troféu
+derrota em qualquer rodada -> próxima tentativa começa pelo primeiro
+retry -> mesmo duelo, sem duplicar XP/avanço
+segunda tentativa após troféu -> rejeitada
 ```
 
 ---
@@ -2564,25 +2553,31 @@ segunda tentativa -> rejeitada
 
 ### Conteúdo e polimento implementados no M7
 
-Somente Benfica: Nilo (1), Cora (2), Davi (2), Bia (3), Rui (4), Sol (4), Teca (5)
+Somente Benfica: a rota principal mantém Nilo (1), Cora (2), Davi (2), Bia (3), Rui (4), Sol (4), Teca (5)
 e Zeca (6). A migration V9 adiciona os sete novos recrutáveis sem mudar resultados
 históricos, engines ou regras de XP. Cada spawn permanece conteúdo estático no Tiled.
 A V11 ajusta os níveis posteriores conforme a seção 28.2 e adiciona treino, sem
 reescrever a V9 nem partidas persistidas. O mapa foi ampliado de 54×38 para 72×50
-tiles, com três desafiantes distribuídos nas novas áreas e um ponto de treino.
+tiles, com três desafiantes distribuídos nas novas áreas e um ponto de treino. A V17
+acrescenta Íris na quadra leste, Bento perto do lago, Lua na praça sul e Cauê na área
+oeste, totalizando doze desafiantes no bairro sem alterar a rota principal.
+A V18 acrescenta Nina ao norte, Beto a oeste, Joca no centro-leste e Maiara no
+sudeste, totalizando dezesseis desafiantes espalhados pelo mapa.
 A seleção e o recrutamento usam o ID do NPC abordado; a Equipe consulta todos os convites.
+O refinamento V16 concentra os diálogos da academia em uma faixa superior compacta,
+mantém somente o treinador em cada setor e aplica cooldown de um minuto por atleta.
 
-O HUD orienta recrutamento → escalação → estádio → conquista. Há sons sintetizados
+O HUD orienta preparar um atleta → estádio → cinco vitórias consecutivas → conquista. Há sons sintetizados
 originais para gol/vitória/convite e opção de silêncio persistida como preferência local.
 As chamadas HTTP expiram após 15 segundos para permitir retry nas telas existentes.
 Reload restaura progresso do servidor durante a sessão HTTP; a posição volta à entrada.
 Autenticação e retomada entre reinícios do servidor não fazem parte desta entrega local.
 
 Validação: `MilestoneSevenIntegrationTest` completa o bairro com os três starters e
-mede 36.000 simulações com conteúdo real, incluindo os primeiros quatro duelos.
+mede simulações com conteúdo real, incluindo os primeiros quatro duelos e a chance de completar a sequência do estádio.
 O smoke `vertical-slice.spec.ts` percorre a
 seção 37 pela interface, sem SQL/fixtures de progresso, incluindo respostas perdidas,
-recrutamento, lineup, conquista, reload e bloqueio permanente do estádio.
+recrutamento, lineup opcional, interior/treinador, duelos consecutivos, conquista, reload e bloqueio permanente do estádio.
 
 ### Aceite final do MVP
 
@@ -2651,19 +2646,25 @@ THEN
 o jogador aparece no roster uma única vez
 
 WHEN
-tenho 5 jogadores
+tenho ao menos 1 jogador
 
 THEN
-posso criar lineup com 5
+posso escolher um atleta para cada duelo de estádio
 
 WHEN
 entro no estádio
 
 THEN
-o backend valida o lineup e requisitos
+entro no interior, posso caminhar e falar com os torcedores
+
+AND
+converso com o treinador para escolher o atleta
+
+AND
+o backend valida ownership e requisitos
 
 WHEN
-venço
+venço os cinco duelos consecutivos
 
 THEN
 ganho o troféu
@@ -2997,7 +2998,7 @@ Antes de criar o segundo bairro:
 - [ ] XP não incentiva grind burro;
 - [ ] recrutamento funciona;
 - [ ] lineup funciona;
-- [ ] 5x5 produz eventos coerentes;
+- [ ] sequência 1x1 exige cinco vitórias e reinicia após derrota;
 - [ ] estádio transacional;
 - [ ] idempotência comprovada;
 - [ ] smoke E2E verde;
@@ -3020,7 +3021,7 @@ O projeto terá provado sua viabilidade quando uma pessoa puder jogar aproximada
       ↓
 "quero evoluir mais um pouco"
       ↓
-"agora consigo montar 5"
+"agora meu atleta está pronto"
       ↓
 "vou tentar o estádio"
       ↓

@@ -5,6 +5,7 @@ import { RESIDENTS } from './residents'
 import { INTERIORS } from './locations'
 
 interface MapPoint {
+  id: number
   x: number
   y: number
   properties?: { name: string; value: string }[]
@@ -27,6 +28,8 @@ describe('authored neighborhood', () => {
     }
     const keys = points.flatMap(point => point.properties!.map(property => property.value))
     expect(new Set(keys).size).toBe(keys.length)
+    const objectIds = map.layers.flatMap(layer => layer.objects ?? []).map(object => object.id)
+    expect(new Set(objectIds).size).toBe(objectIds.length)
     expect(entry).toBeDefined()
     expect(map.width).toBeGreaterThanOrEqual(72)
     expect(map.height).toBeGreaterThanOrEqual(50)
@@ -51,10 +54,19 @@ describe('authored neighborhood', () => {
         }
       }
     }
-    expect(npcs).toHaveLength(8)
+    expect(npcs).toHaveLength(16)
     npcs.forEach(npc => expect(npc).toBeDefined())
-    expect(new Set(CHALLENGERS.map(npc => npc.id)).size).toBe(8)
-    expect(npcs.filter(npc => npc.x >= 54 * map.tilewidth || npc.y >= 38 * map.tileheight).length).toBeGreaterThanOrEqual(3)
+    expect(new Set(CHALLENGERS.map(npc => npc.id)).size).toBe(16)
+    expect(npcs.slice(8).map(({ x, y }) => [x, y])).toEqual([
+      [1888, 480], // quadra leste
+      [320, 880], // lago
+      [1120, 1168], // praça sul
+      [480, 752], // rua a oeste
+      [1200, 112], // norte
+      [144, 496], // oeste
+      [1616, 592], // centro-leste
+      [1968, 1104], // sudeste
+    ])
   })
 
   it('keeps the entry and challenger on walkable tiles with a connected route', () => {
@@ -86,7 +98,7 @@ describe('authored neighborhood', () => {
   it('places stronger challengers progressively closer to the stadium', () => {
     const stadium = points.find(point => point.properties?.some(property => property.value === 'benfica.stadium.entry'))!
     const distance = (point: MapPoint) => Math.hypot(point.x - stadium.x, point.y - stadium.y)
-    const distances = npcs.map(distance)
+    const distances = npcs.slice(0, 8).map(distance)
     for (let index = 1; index < distances.length; index++) {
       expect(distances[index]).toBeLessThan(distances[index - 1]!)
     }

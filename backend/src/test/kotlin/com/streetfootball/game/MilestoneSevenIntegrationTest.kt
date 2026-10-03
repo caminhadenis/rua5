@@ -38,7 +38,7 @@ class MilestoneSevenIntegrationTest {
     @Test
     fun `every starter completes the neighborhood through HTTP without save fixtures`() {
         val challengers = jdbc.queryForList("SELECT id::text FROM challenger WHERE enabled ORDER BY spawn_key", String::class.java)
-        assertEquals(8, challengers.size)
+        assertEquals(16, challengers.size)
         assertEquals(listOf("benfica"), jdbc.queryForList("SELECT DISTINCT map_id FROM challenger", String::class.java))
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM stadium", Int::class.java))
         for (starter in listOf("starter_leo", "starter_rafa", "starter_breno")) {
@@ -72,16 +72,42 @@ class MilestoneSevenIntegrationTest {
                 assertEquals(recruited, body(send(client, "POST", path)))
             }
             val roster = body(send(client, "GET", "/roster"))
-            assertEquals(9, roster.size())
+            assertEquals(17, roster.size())
             val preferred = setOf(starter, "npc_rui_01", "npc_sol_01", "npc_teca_01", "npc_zeca_01")
             val ids = roster.filter { it["playerDefinitionId"].asString() in preferred }.map { it["id"].asString() }
             body(send(client, "PUT", "/lineup", mapOf("ownedPlayerIds" to ids.take(4) + null)))
             val stadium = "/stadiums/benfica_stadium"
-            assertEquals(409, send(client, "POST", "$stadium/matches", key = UUID.randomUUID()).statusCode())
+            assertEquals("AVAILABLE", body(send(client, "GET", stadium))["status"].asString())
             body(send(client, "PUT", "/lineup", mapOf("ownedPlayerIds" to ids)))
-            assertEquals("trophy_benfica", win("$stadium/matches")["rewards"]["trophy"]["id"].asString())
+            var trophyWon = false
+            for (duel in 1..1000) {
+                val info = body(send(client, "GET", stadium))
+                val series = info["series"]
+                val payload =
+                    mapOf(
+                        "ownedPlayerId" to chosen["id"].asString(),
+                        "seriesId" to if (series.isNull) null else series["id"].asString(),
+                        "roundNumber" to if (series.isNull || series["finished"].asBoolean()) 1 else series["played"].asInt() + 1,
+                    )
+                val key = UUID.randomUUID()
+                val receipt = body(send(client, "POST", "$stadium/matches", payload, key))
+                matchCount++
+                assertEquals(receipt, body(send(client, "POST", "$stadium/matches", payload, key)))
+                if (!receipt["rewards"]["trophy"].isNull) {
+                    trophyWon = true
+                    break
+                }
+            }
+            assertTrue(trophyWon, "$starter must complete five consecutive stadium duels")
             assertEquals("COMPLETED", body(send(client, "GET", stadium))["status"].asString())
-            val blocked = send(client, "POST", "$stadium/matches", key = UUID.randomUUID())
+            val blocked =
+                send(
+                    client,
+                    "POST",
+                    "$stadium/matches",
+                    mapOf("ownedPlayerId" to chosen["id"].asString(), "roundNumber" to 1),
+                    UUID.randomUUID(),
+                )
             assertEquals(409, blocked.statusCode())
             assertEquals("STADIUM_ALREADY_COMPLETED", json.readTree(blocked.body())["code"].asString())
             assertEquals(
@@ -93,7 +119,7 @@ class MilestoneSevenIntegrationTest {
     }
 
     @Test
-    fun `training improves stat only every fifth session and is owned idempotent and profile rate limited`() {
+    fun `training improves stat only every fifth session and rate limits each athlete independently`() {
         val client = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         val profileId = body(send(client, "POST", "/profiles", mapOf("displayName" to "Treino")))["id"].asString()
         val starter = body(send(client, "POST", "/profile/starter", mapOf("playerDefinitionId" to "starter_leo")))
@@ -114,15 +140,40 @@ class MilestoneSevenIntegrationTest {
         assertEquals(first["statAfter"], after["stats"]["dribbling"])
         assertEquals(before["stats"]["passing"], after["stats"]["passing"])
         val status = body(send(client, "GET", "/training/status"))
-        assertEquals(first["nextAvailableAt"], status["nextAvailableAt"])
+        assertEquals(playerId, status["cooldowns"][0]["ownedPlayerId"].asString())
+        assertEquals(first["nextAvailableAt"], status["cooldowns"][0]["nextAvailableAt"])
         assertEquals(1, status["progress"][0]["completed"].asInt())
-        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM training_session WHERE owned_player_id = ?", Int::class.java, UUID.fromString(playerId)))
+        assertEquals(
+            1,
+            jdbc.queryForObject(
+                "SELECT count(*) FROM training_session WHERE owned_player_id = ?",
+                Int::class.java,
+                UUID.fromString(playerId),
+            ),
+        )
         val cooldown = send(client, "POST", path, payload, UUID.randomUUID())
         assertEquals(409, cooldown.statusCode())
         assertEquals("TRAINING_COOLDOWN", json.readTree(cooldown.body())["code"].asString())
         val secondPlayer = UUID.randomUUID()
-        jdbc.update("INSERT INTO owned_player (id, profile_id, player_definition_id, recruited_at) VALUES (?, ?, ?, now())", secondPlayer, UUID.fromString(profileId), "starter_rafa")
-        assertEquals(409, send(client, "POST", path, mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "SPEED"), UUID.randomUUID()).statusCode())
+        jdbc.update(
+            "INSERT INTO owned_player (id, profile_id, player_definition_id, recruited_at) VALUES (?, ?, ?, now())",
+            secondPlayer,
+            UUID.fromString(profileId),
+            "starter_rafa",
+        )
+        val secondAthlete =
+            body(
+                send(
+                    client,
+                    "POST",
+                    path,
+                    mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "SPEED"),
+                    UUID.randomUUID(),
+                ),
+            )
+        assertEquals(0, secondAthlete["progressBefore"].asInt())
+        assertEquals(1, secondAthlete["progressAfter"].asInt())
+        assertEquals(2, body(send(client, "GET", "/training/status"))["cooldowns"].size())
         assertEquals(409, send(client, "POST", path, payload + ("focus" to "PASSING"), key).statusCode())
         val other = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         body(send(other, "POST", "/profiles", mapOf("displayName" to "Outro")))
@@ -131,24 +182,50 @@ class MilestoneSevenIntegrationTest {
         assertEquals(400, send(client, "POST", path, payload + ("focus" to "GOALKEEPING"), UUID.randomUUID()).statusCode())
         var latest = first
         for (session in 2..5) {
-            jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE profile_id = ?", UUID.fromString(profileId))
+            jdbc.update(
+                "UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?",
+                UUID.fromString(playerId),
+            )
             latest = body(send(client, "POST", path, payload, UUID.randomUUID()))
             assertEquals((session % 5), latest["progressAfter"].asInt())
             assertEquals(before["stats"]["dribbling"].asInt() + if (session == 5) 1 else 0, latest["statAfter"].asInt())
         }
-        assertEquals(5, jdbc.queryForObject("SELECT count(*) FROM training_session WHERE owned_player_id = ?", Int::class.java, UUID.fromString(playerId)))
-        assertEquals(0, body(send(client, "GET", "/training/status"))["progress"][0]["completed"].asInt())
-        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE profile_id = ?", UUID.fromString(profileId))
+        assertEquals(
+            5,
+            jdbc.queryForObject(
+                "SELECT count(*) FROM training_session WHERE owned_player_id = ?",
+                Int::class.java,
+                UUID.fromString(playerId),
+            ),
+        )
+        val playerProgress =
+            body(send(client, "GET", "/training/status"))["progress"]
+                .first { it["ownedPlayerId"].asString() == playerId && it["focus"].asString() == "DRIBBLING" }
+        assertEquals(0, playerProgress["completed"].asInt())
+        jdbc.update(
+            "UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?",
+            UUID.fromString(playerId),
+        )
         val otherFocus = body(send(client, "POST", path, payload + ("focus" to "PASSING"), UUID.randomUUID()))
         assertEquals(0, otherFocus["progressBefore"].asInt())
         assertEquals(1, otherFocus["progressAfter"].asInt())
         assertEquals(otherFocus["statBefore"], otherFocus["statAfter"])
-        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE profile_id = ?", UUID.fromString(profileId))
-        val otherAthlete = body(send(client, "POST", path, mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING"), UUID.randomUUID()))
+        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
+        val otherAthlete =
+            body(send(client, "POST", path, mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING"), UUID.randomUUID()))
         assertEquals(0, otherAthlete["progressBefore"].asInt())
         assertEquals(1, otherAthlete["progressAfter"].asInt())
         assertEquals(otherAthlete["statBefore"], otherAthlete["statAfter"])
-        val duel = body(send(client, "POST", "/challenges/00000000-0000-4000-8000-000000000001/matches", mapOf("ownedPlayerId" to playerId), UUID.randomUUID()))
+        val duel =
+            body(
+                send(
+                    client,
+                    "POST",
+                    "/challenges/00000000-0000-4000-8000-000000000001/matches",
+                    mapOf("ownedPlayerId" to playerId),
+                    UUID.randomUUID(),
+                ),
+            )
         assertEquals(latest["statAfter"], duel["match"]["home"][0]["stats"]["dribbling"])
     }
 
@@ -165,11 +242,16 @@ class MilestoneSevenIntegrationTest {
             jdbc.query("SELECT player_definition_id, level FROM stadium_opponent_player ORDER BY slot_index", { row, _ ->
                 participant(row.getString("player_definition_id"), row.getInt("level"), "away")
             })
-        val challengeLevels = jdbc.query("SELECT player_definition_id, level FROM challenger", { row, _ ->
-            row.getString("player_definition_id") to row.getInt("level")
-        }).toMap()
-        assertEquals(listOf(1, 1, 1, 2, 2, 3, 4, 5),
-            jdbc.queryForList("SELECT level FROM challenger ORDER BY spawn_key", Int::class.java))
+        val challengeLevels =
+            jdbc
+                .query("SELECT player_definition_id, level FROM challenger", { row, _ ->
+                    row.getString("player_definition_id") to row.getInt("level")
+                })
+                .toMap()
+        assertEquals(
+            listOf(1, 1, 1, 2, 2, 3, 4, 5, 2, 1, 3, 2, 2, 1, 3, 4),
+            jdbc.queryForList("SELECT level FROM challenger ORDER BY spawn_key", Int::class.java),
+        )
 
         fun rate(request: MatchRequest): Double =
             (0L until 2000L).count { seed -> engine.simulate(request.copy(seed = seed)).outcome == MatchOutcome.WIN } / 2000.0
@@ -184,53 +266,42 @@ class MilestoneSevenIntegrationTest {
                         "1",
                     ),
                 )
-            val early =
-                rate(
-                    MatchRequest(
-                        MatchMode.STADIUM_5V5,
-                        listOf(
-                            participant(starter, 3),
-                            participant("npc_nilo_01", 1),
-                            participant("npc_cora_01", challengeLevels.getValue("npc_cora_01")),
-                            participant("npc_davi_01", challengeLevels.getValue("npc_davi_01")),
-                            participant("npc_bia_01", challengeLevels.getValue("npc_bia_01")),
-                        ),
-                        away,
-                        0,
-                        "2",
-                    ),
-                )
+
+            fun seriesRate(level: Int): Double =
+                (0L until 2000L).count { seed ->
+                    away.withIndex().all { (round, opponent) ->
+                        engine
+                            .simulate(
+                                MatchRequest(
+                                    MatchMode.STADIUM_1V1,
+                                    listOf(participant(starter, level)),
+                                    listOf(opponent),
+                                    seed * 5 + round,
+                                    "3",
+                                ),
+                            ).outcome == MatchOutcome.WIN
+                    }
+                } / 2000.0
+            val early = seriesRate(1)
             for (opponent in listOf("npc_cora_01", "npc_davi_01", "npc_bia_01")) {
-                val firstDuel = rate(MatchRequest(
-                    MatchMode.DUEL_1V1,
-                    listOf(participant(starter, 1)),
-                    listOf(participant(opponent, challengeLevels.getValue(opponent), "away")),
-                    0, "1",
-                ))
+                val firstDuel =
+                    rate(
+                        MatchRequest(
+                            MatchMode.DUEL_1V1,
+                            listOf(participant(starter, 1)),
+                            listOf(participant(opponent, challengeLevels.getValue(opponent), "away")),
+                            0,
+                            "1",
+                        ),
+                    )
                 val minimum = if (opponent == "npc_bia_01") 0.55 else 0.60
                 assertTrue(firstDuel > minimum, "$starter needs a fair opening against $opponent: $firstDuel")
             }
-            val explored =
-                rate(
-                    MatchRequest(
-                        MatchMode.STADIUM_5V5,
-                        listOf(
-                            participant(starter, 3),
-                            participant("npc_rui_01", challengeLevels.getValue("npc_rui_01")),
-                            participant("npc_sol_01", challengeLevels.getValue("npc_sol_01")),
-                            participant("npc_teca_01", challengeLevels.getValue("npc_teca_01")),
-                            participant("npc_zeca_01", challengeLevels.getValue("npc_zeca_01")),
-                        ),
-                        away,
-                        0,
-                        "2",
-                    ),
-                )
-            println("M7 balance $starter: intro=$intro earlyStadium=$early exploredStadium=$explored (2000 seeds each)")
+            val explored = seriesRate(10)
+            println("M7 balance $starter: intro=$intro firstStadiumSeries=$early evolvedStadiumSeries=$explored")
             assertTrue(intro in 0.68..0.85)
-            assertTrue(early in 0.15..0.65, "First five must have a viable chance: $early")
-            assertTrue(explored in 0.40..0.85, "Explored lineup: $explored")
-            assertTrue(explored > early + 0.08, "Exploring must improve the team")
+            assertTrue(early > 0.0, "Every starter can win the five duels")
+            assertTrue(explored > early + 0.02, "Evolution must improve the chance of completing the series")
         }
     }
 

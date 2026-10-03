@@ -1,15 +1,18 @@
-import { originalUniformUrls, uniformUrl } from '../team/teamColors'
+import { originalChallengerUrl, ownedPlayerEmotionUrl, ownedPlayerUniformUrl } from '../team/teamColors'
 import Phaser from 'phaser'
 import { gameAudio } from '../audio/GameAudio'
-import { request, type DuelResponse, type MatchEvent, type RosterPlayer } from '../../api/gameApi'
+import { request, type DuelResponse, type MatchEvent, type RosterPlayer, type StadiumResponse } from '../../api/gameApi'
+import { surroundWithStands } from '../match/StadiumAudience'
 import { emotionsForOutcome, type DuelEmotion } from '../match/duelEmotions'
 import { Playback, presentEvent } from '../match/Playback'
 import { onGoalArrival } from '../match/goalArrival'
+import { choreographyFor, type DuelAction, type DuelSide } from '../match/DuelChoreography'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 import { recruitmentPanel } from '../ui/RecruitmentPanel'
 
 export class MatchScene extends Phaser.Scene {
   private result!: DuelResponse
+  private stadium?: StadiumResponse
   private playback!: Playback
   private panel!: HTMLElement
   private caption!: HTMLElement
@@ -19,10 +22,11 @@ export class MatchScene extends Phaser.Scene {
   private finished = false
   private pendingGoal?: () => void
   constructor() { super('MatchScene') }
-  init(result: DuelResponse): void {
+  init(result: DuelResponse & { stadium?: StadiumResponse }): void {
     this.pendingGoal?.()
     this.pendingGoal = undefined
     this.result = result
+    this.stadium = result.stadium
     this.playback = new Playback(result.match.events)
     this.finished = false
   }
@@ -48,6 +52,7 @@ export class MatchScene extends Phaser.Scene {
       <div class="duel-time"><span data-clock>PREPARADOS?</span><progress aria-label="Andamento do duelo" value="0" max="100"></progress><span>1 × 1</span></div>
       <div class="duel-commentary"><span class="commentary-marker" aria-hidden="true">◆</span><p data-testid="current-event" role="status" aria-live="polite">Bola no centro. Vai começar o duelo!</p></div>
       <div class="duel-controls"></div>`
+    if (this.stadium) this.drawStadiumAudience()
     const { home, away } = this.result.match
     for (const side of ['home', 'away'] as const) {
       const player = (side === 'home' ? home : away)[0]!
@@ -55,8 +60,11 @@ export class MatchScene extends Phaser.Scene {
       this.panel.querySelector(`[data-level="${side}"]`)!.textContent = `Nv. ${player.level}`
       const duelist = this.panel.querySelector<HTMLElement>(`.duelist.${side}`)!
       duelist.dataset.avatar = player.playerDefinitionId?.startsWith('npc_') || side === 'away' ? 'challenger' : 'player'
+      duelist.dataset.playerDefinitionId = player.playerDefinitionId ?? ''
       this.showEmotion(side, 'neutral')
     }
+    this.placeDuelist('home', 32, 50, 'carry')
+    this.placeDuelist('away', 68, 50, 'defend')
     this.caption = this.panel.querySelector('[data-testid="current-event"]')!
     this.clock = this.panel.querySelector('[data-clock]')!
     this.progress = this.panel.querySelector('progress')!
@@ -82,8 +90,18 @@ export class MatchScene extends Phaser.Scene {
     this.pendingGoal = undefined
     const participants = [...this.result.match.home, ...this.result.match.away]
     this.panel.dataset.side = event.side.toLowerCase()
+    this.panel.dataset.event = event.type.toLowerCase()
     this.panel.classList.remove('is-goal')
     const ball = this.panel.querySelector<HTMLElement>('.duel-ball')!
+    const choreography = choreographyFor(event)
+    this.placeDuelist('home', choreography.home.x, choreography.home.y, choreography.home.action)
+    this.placeDuelist('away', choreography.away.x, choreography.away.y, choreography.away.action)
+    ball.style.setProperty('--ball-x', `${choreography.ball.x}%`)
+    ball.style.setProperty('--ball-y', `${choreography.ball.y}%`)
+    ball.dataset.owner = choreography.ball.owner ?? ''
+    // Restart a repeated kick animation even when consecutive events have the same type.
+    ball.dataset.shot = 'reset'
+    void ball.offsetWidth
     ball.dataset.shot = event.type === 'GOAL' ? event.side.toLowerCase() :
       event.type === 'SHOT_MISSED' ? `${event.side.toLowerCase()}-miss` :
         event.type === 'SAVE' ? `${event.side.toLowerCase()}-save` : 'reset'
@@ -99,7 +117,10 @@ export class MatchScene extends Phaser.Scene {
       this.caption.textContent = presentEvent(event, participants)
       this.caption.title = this.caption.textContent
       this.caption.dataset.sequence = String(event.sequence)
-      this.clock.textContent = `${event.minute}' · EM JOGO`
+      this.clock.textContent = `${event.minute}' · ${event.type.startsWith('PENALTY') ? 'PÊNALTIS' : 'EM JOGO'}`
+      if (this.stadium && event.metadata?.homePenalties !== undefined) {
+        this.panel.querySelector('[data-penalties]')!.textContent = `Pênaltis ${event.metadata.homePenalties} × ${event.metadata.awayPenalties}`
+      }
       this.progress.value = event.sequence / this.result.match.events.length * 100
       // The backend supplies the score at this exact event. Never count goals in the client.
       this.showScore(event.homeScore, event.awayScore)
@@ -115,17 +136,28 @@ export class MatchScene extends Phaser.Scene {
       this.pendingGoal = onGoalArrival(ball, reveal)
     } else reveal()
   }
+  private placeDuelist(side: DuelSide, x: number, y: number, action: DuelAction): void {
+    const duelist = this.panel.querySelector<HTMLElement>(`.duelist.${side}`)!
+    duelist.style.setProperty('--duelist-x', `${x}%`)
+    duelist.style.setProperty('--duelist-y', `${y}%`)
+    duelist.dataset.action = action
+  }
   private showEmotion(side: 'home' | 'away', emotion: DuelEmotion): void {
     const duelist = this.panel.querySelector<HTMLElement>(`.duelist.${side}`)!
     duelist.dataset.emotion = emotion
     const avatar = duelist.dataset.avatar === 'challenger' ? 'challenger' : 'player'
-    const asset = emotion === 'neutral' ? avatar : 'duel-emotions'
     const sprite = duelist.querySelector<HTMLElement>('.duel-sprite')!
-    sprite.style.backgroundImage = `url("${side === 'home' ? uniformUrl(asset) : originalUniformUrls[asset]}")`
-    sprite.style.backgroundSize = emotion === 'neutral' ? (avatar === 'player' ? '256px 240px' : '64px 80px') : '128px 160px'
-    sprite.style.backgroundPosition = emotion === 'neutral'
+    const playerDefinitionId = duelist.dataset.playerDefinitionId || undefined
+    const usesEmotionSheet = emotion !== 'neutral' && avatar === 'player'
+    duelist.dataset.poseSheet = usesEmotionSheet ? 'emotion' : 'base'
+    const homeUrl = !usesEmotionSheet
+      ? ownedPlayerUniformUrl(playerDefinitionId)
+      : ownedPlayerEmotionUrl(playerDefinitionId)
+    sprite.style.backgroundImage = `url("${side === 'home' ? homeUrl : originalChallengerUrl(playerDefinitionId)}")`
+    sprite.style.backgroundSize = usesEmotionSheet ? '128px 160px' : (avatar === 'player' ? '256px 240px' : '64px 80px')
+    sprite.style.backgroundPosition = !usesEmotionSheet
       ? (avatar === 'player' ? '0 -80px' : '0 0')
-      : `${emotion === 'sad' ? '-64px' : '0'} ${avatar === 'challenger' ? '-80px' : '0'}`
+      : `${emotion === 'sad' ? '-64px' : '0'} 0`
   }
   private showScore(home: number, away: number): void {
     this.panel.querySelector('[data-testid="home-score"]')!.textContent = String(home)
@@ -150,8 +182,14 @@ export class MatchScene extends Phaser.Scene {
     }
     const outcome = { WIN: 'Vitória!', DRAW: 'Empate', LOSS: 'Derrota' }[match.outcome]
     this.caption.textContent = `${outcome} ${match.home[0]!.name} ${match.homeScore} × ${match.awayScore} ${match.away[0]!.name}`
+    if (this.stadium?.match.penalties) {
+      const { home, away } = this.stadium.match.penalties
+      this.panel.querySelector('[data-penalties]')!.textContent = `Pênaltis ${home} × ${away}`
+      this.caption.textContent += ` · Pênaltis ${home} × ${away}`
+    }
     this.caption.title = this.caption.textContent
     this.caption.dataset.testid = 'match-result'
+    if (this.stadium) { this.finishStadium(); return }
     if (rewards) {
       const reward = paragraph(this.controls, `+${rewards.xpAwarded} XP · Nível ${rewards.currentLevel} · ${rewards.currentXp} / ${rewards.xpToNextLevel ?? 'máximo'} XP`)
       reward.dataset.testid = 'reward'
@@ -183,5 +221,21 @@ export class MatchScene extends Phaser.Scene {
         back.disabled = false
       })
     })
+  }
+
+  private drawStadiumAudience(): void {
+    this.panel.classList.add('stadium-duel-panel')
+    this.panel.querySelector('.duel-heading span')!.textContent = `ESTÁDIO DO BENFICA · DUELO ${this.stadium!.rewards.series.played}/5`
+    const penalties = document.createElement('small')
+    penalties.dataset.penalties = ''
+    penalties.className = 'duel-penalties'
+    this.panel.querySelector('.duel-scoreboard')!.append(penalties)
+    const arena = this.panel.querySelector<HTMLElement>('.duel-arena')!
+    surroundWithStands(arena)
+  }
+
+  private finishStadium(): void {
+    // End playback before showing the coach, so conversations never cover the court.
+    this.scene.start('StadiumScene', { id: this.stadium!.match.sourceId!, result: this.stadium })
   }
 }

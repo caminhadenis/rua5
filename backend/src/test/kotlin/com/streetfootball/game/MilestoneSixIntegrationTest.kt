@@ -53,6 +53,7 @@ class MilestoneSixIntegrationTest {
             "user_trophy",
             "user_lineup",
             "game_match",
+            "stadium_series",
             "challenger_progress",
             "owned_player",
             "game_profile",
@@ -116,200 +117,234 @@ class MilestoneSixIntegrationTest {
     }
 
     @Test
-    fun `four rejected five allowed trophy blocks new keys but original snapshot survives lineup and content changes`() {
+    fun `one owned athlete wins all five in strength order and trophy only appears on final win`() {
         val p = player()
-        val ids = five(p)
-        putLineup(p, ids.take(4) + null)
-        assertError(play(p), 409, "LINEUP_INCOMPLETE")
-        assertEquals(0, count("game_match"))
-        putLineup(p, ids)
-        val key = UUID.randomUUID()
-        val win = body(play(p, key))
-        assertEquals("STADIUM_5V5", win.path("match").path("mode").asString())
-        assertEquals(5, win.path("match").path("home").size())
-        assertEquals(5, win.path("match").path("away").size())
-        assertEquals(5, win.path("rewards").path("players").size())
+        assertEquals("AVAILABLE", body(get(p, "/stadiums/benfica_stadium")).path("status").asString())
+        val ordered = body(get(p, "/stadiums/benfica_stadium")).path("opponentLineup")
+        val snapshots = ordered.toList().map { json.treeToValue(it, com.streetfootball.game.match.domain.MatchParticipant::class.java) }
         assertEquals(
-            "trophy_benfica",
-            win
-                .path("rewards")
-                .path("trophy")
-                .path("id")
-                .asString(),
+            snapshots,
+            com.streetfootball.game.stadium.StadiumPolicy
+                .orderedOpponents(snapshots),
         )
-        assertEquals(1, count("user_trophy"))
+        var finalKey = UUID.randomUUID()
+        var finalCommand = ""
+        var finalResult: JsonNode? = null
+        for (round in 1..5) {
+            val key = UUID.randomUUID()
+            val cmd = command(p)
+            val result = body(play(p, key, cmd))
+            assertEquals("STADIUM_1V1", result.path("match").path("mode").asString())
+            assertEquals(1, result.path("match").path("home").size())
+            assertEquals(1, result.path("match").path("away").size())
+            assertEquals(ordered[round - 1], result.path("match").path("away")[0])
+            assertEquals(1, result.path("rewards").path("players").size())
+            assertEquals(
+                round,
+                result
+                    .path("rewards")
+                    .path("series")
+                    .path("wins")
+                    .asInt(),
+            )
+            assertEquals(if (round == 5) 1 else 0, count("user_trophy"))
+            val roster = roster(p)
+            assertEquals(result, body(play(p, key, cmd)))
+            assertEquals(roster, roster(p))
+            finalKey = key
+            finalCommand = cmd
+            finalResult = result
+        }
+        assertEquals(5, count("game_match"))
         assertEquals(5, jdbc.queryForObject("SELECT sum(wins)::integer FROM owned_player", Int::class.java))
         assertEquals("COMPLETED", body(get(p, "/stadiums/benfica_stadium")).path("status").asString())
         assertError(play(p), 409, "STADIUM_ALREADY_COMPLETED")
-        val rosterBefore = roster(p)
-        putLineup(p, List(5) { null })
         jdbc.update("UPDATE stadium SET enabled = FALSE")
         jdbc.update("UPDATE game_profile SET current_map_id = 'other'")
-        assertEquals(win, body(play(p, key)))
-        assertEquals(rosterBefore, roster(p))
-        assertEquals(1, count("game_match"))
-        assertError(send(p.client, "POST", "/stadiums/unknown/matches", "{}", key), 409, "IDEMPOTENCY_CONFLICT")
-        assertError(duel(p, key), 409, "IDEMPOTENCY_CONFLICT")
+        assertEquals(finalResult, body(play(p, finalKey, finalCommand)))
+        assertError(duel(p, finalKey), 409, "IDEMPOTENCY_CONFLICT")
+        assertError(
+            play(p, finalKey, finalCommand.replace(p.ownedId.toString(), UUID.randomUUID().toString())),
+            409,
+            "IDEMPOTENCY_CONFLICT",
+        )
     }
 
     @Test
-    fun `loss allows retry XP applies to five and keys are shared with duels`() {
+    fun `loss after three wins ends attempt and next command restarts first opponent with a new series`() {
         val p = player()
-        putLineup(p, five(p))
-        val duelKey = UUID.randomUUID()
-        body(duel(p, duelKey))
-        assertError(play(p, duelKey), 409, "IDEMPOTENCY_CONFLICT")
-        engine.outcome = MatchOutcome.LOSS
-        val key = UUID.randomUUID()
-        val loss = body(play(p, key))
-        assertTrue(loss.path("rewards").path("trophy").isNull)
+        repeat(3) { body(play(p)) }
         assertEquals(0, count("user_trophy"))
-        assertEquals(5, jdbc.queryForObject("SELECT sum(losses)::integer FROM owned_player", Int::class.java))
-        val before = roster(p)
-        assertEquals(loss, body(play(p, key)))
-        assertEquals(before, roster(p))
-        body(play(p))
+        val before = body(get(p, "/stadiums/benfica_stadium")).path("series")
+        engine.outcome = MatchOutcome.LOSS
+        val cmd = command(p)
+        val key = UUID.randomUUID()
+        val loss = body(play(p, key, cmd))
+        assertTrue(
+            loss
+                .path("rewards")
+                .path("series")
+                .path("finished")
+                .asBoolean(),
+        )
+        assertEquals(
+            3,
+            loss
+                .path("rewards")
+                .path("series")
+                .path("wins")
+                .asInt(),
+        )
+        assertEquals(0, count("user_trophy"))
+        val after = roster(p)
+        assertEquals(loss, body(play(p, key, cmd)))
+        assertEquals(after, roster(p))
         engine.outcome = MatchOutcome.WIN
-        body(play(p))
+        val restart = body(play(p))
+        assertEquals(
+            1,
+            restart
+                .path("rewards")
+                .path("series")
+                .path("played")
+                .asInt(),
+        )
+        assertTrue(before.path("id") != restart.path("rewards").path("series").path("id"))
+        val first = body(get(p, "/stadiums/benfica_stadium")).path("opponentLineup")[0]
+        assertEquals(first, restart.path("match").path("away")[0])
+        assertError(play(p, UUID.randomUUID(), cmd), 409, "STADIUM_SEQUENCE_CHANGED")
+        repeat(4) { body(play(p)) }
         assertEquals(1, count("user_trophy"))
+        assertEquals(9, count("game_match"))
     }
 
     @Test
-    fun `access requirements disabled participants malformed key and session are enforced`() {
+    fun `ownership session requirements and malformed commands cannot advance the series`() {
         val p = player()
-        val ids = five(p)
-        putLineup(p, ids)
-        assertError(send(client(), "POST", "/stadiums/benfica_stadium/matches", "{}", UUID.randomUUID()), 404, "PROFILE_NOT_FOUND")
-        assertError(send(p.client, "POST", "/stadiums/benfica_stadium/matches"), 400, "MALFORMED_REQUEST")
-        assertError(send(p.client, "POST", "/stadiums/unknown/matches", "{}", UUID.randomUUID()), 404, "STADIUM_NOT_FOUND")
+        val other = playerWithStarter("starter_breno")
+        val cmd = command(p)
+        assertError(send(other.client, "POST", "/stadiums/benfica_stadium/matches", cmd, UUID.randomUUID()), 403, "PLAYER_NOT_OWNED")
+        assertError(send(client(), "POST", "/stadiums/benfica_stadium/matches", cmd, UUID.randomUUID()), 404, "PROFILE_NOT_FOUND")
+        assertError(send(p.client, "POST", "/stadiums/benfica_stadium/matches", "{}", UUID.randomUUID()), 400, "MALFORMED_REQUEST")
+        assertError(play(p, UUID.randomUUID(), cmd.replace("\"roundNumber\":1", "\"roundNumber\":6")), 400, "VALIDATION_ERROR")
         jdbc.update("INSERT INTO stadium_requirement VALUES ('benfica_stadium', 'trophy_benfica')")
         assertError(play(p), 409, "STADIUM_REQUIREMENT_NOT_MET")
-        assertEquals("LOCKED", body(get(p, "/stadiums/benfica_stadium")).path("status").asString())
         jdbc.update("DELETE FROM stadium_requirement")
-        jdbc.update("UPDATE game_profile SET current_map_id = 'other' WHERE id = ?", p.profileId)
-        assertError(play(p), 409, "STADIUM_LOCKED")
-        jdbc.update("UPDATE game_profile SET current_map_id = NULL WHERE id = ?", p.profileId)
         jdbc.update("UPDATE stadium SET enabled = FALSE")
         assertError(play(p), 409, "STADIUM_LOCKED")
         jdbc.update("UPDATE stadium SET enabled = TRUE")
         jdbc.update("UPDATE player_definition SET enabled = FALSE WHERE id = 'starter_leo'")
         assertError(play(p), 404, "OWNED_PLAYER_NOT_FOUND")
-        val other = playerWithStarter("starter_breno")
-        assertError(putLineup(other, ids), 403, "PLAYER_NOT_OWNED")
         assertEquals(0, count("game_match"))
+        assertEquals(0, count("stadium_series"))
     }
 
     @Test
-    fun `commit failure rolls back match five XP updates trophy and key then retry succeeds`() {
+    fun `commit failure rolls back final match XP series advance trophy and key`() {
         val p = player()
-        putLineup(p, five(p))
+        repeat(4) { body(play(p)) }
         val before = roster(p)
         val key = UUID.randomUUID()
+        val cmd = command(p)
         jdbc.execute("CREATE FUNCTION fail_m6() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''fail''; END;'")
         try {
             jdbc.execute(
                 "CREATE CONSTRAINT TRIGGER fail_m6 AFTER INSERT ON user_trophy DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_m6()",
             )
-            assertError(play(p, key), 500, "INTERNAL_ERROR")
+            assertError(play(p, key, cmd), 500, "INTERNAL_ERROR")
             assertEquals(before, roster(p))
-            assertEquals(0, count("game_match"))
+            assertEquals(4, count("game_match"))
+            assertEquals(4, body(get(p, "/stadiums/benfica_stadium")).path("series").path("played").asInt())
             assertEquals(0, count("user_trophy"))
         } finally {
             jdbc.execute("DROP TRIGGER fail_m6 ON user_trophy")
             jdbc.execute("DROP FUNCTION fail_m6()")
         }
-        body(play(p, key))
+        body(play(p, key, cmd))
         assertEquals(1, count("user_trophy"))
     }
 
     @Test
-    fun `concurrent identical keys return one result and different keys cannot win twice`() {
-        for (sameKey in listOf(true, false)) {
-            val p = player()
-            putLineup(p, five(p))
-            val key = UUID.randomUUID()
-            Executors.newFixedThreadPool(6).use { executor ->
-                val results =
-                    (1..6)
-                        .map {
-                            executor.submit(Callable { play(p, if (sameKey) key else UUID.randomUUID()) })
-                        }.map { it.get(30, TimeUnit.SECONDS) }
-                val successes = results.filter { it.statusCode() == 200 }
-                assertEquals(if (sameKey) 6 else 1, successes.size)
-                assertEquals(1, successes.map { body(it) }.distinct().size)
-                results.filter { it.statusCode() != 200 }.forEach { assertError(it, 409, "STADIUM_ALREADY_COMPLETED") }
-            }
-            assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM game_match WHERE profile_id = ?", Int::class.java, p.profileId))
+    fun `concurrent retries produce one match and stale new keys cannot skip an opponent`() {
+        val p = player()
+        val cmd = command(p)
+        val key = UUID.randomUUID()
+        Executors.newFixedThreadPool(6).use { executor ->
+            val results = (1..6).map { executor.submit(Callable { play(p, key, cmd) }) }.map { it.get(30, TimeUnit.SECONDS) }
+            assertEquals(1, results.map { body(it) }.distinct().size)
         }
+        assertEquals(1, count("game_match"))
+        val nextCmd = command(p)
+        Executors.newFixedThreadPool(6).use { executor ->
+            val results =
+                (1..6)
+                    .map {
+                        executor.submit(
+                            Callable { play(p, UUID.randomUUID(), nextCmd) },
+                        )
+                    }.map { it.get(30, TimeUnit.SECONDS) }
+            assertEquals(1, results.count { it.statusCode() == 200 })
+            results.filter { it.statusCode() != 200 }.forEach { assertError(it, 409, "STADIUM_SEQUENCE_CHANGED") }
+        }
+        assertEquals(2, count("game_match"))
     }
 
     @Test
-    fun `real engine endpoint persists reproducible snapshots including penalty results`() {
-        engine.real = true
+    fun `real single duel snapshot reproduces and database prevents early trophy and duplicate rounds`() {
         val p = player()
-        putLineup(p, five(p))
-        body(play(p))
+        engine.real = true
+        val receipt = body(play(p))
         val snapshot = jdbc.queryForObject("SELECT request_snapshot::text FROM game_match", String::class.java)!!
         val result =
             com.streetfootball.game.match.domain.VersionedMatchEngine().simulate(
                 json.readValue(snapshot, MatchRequest::class.java),
             )
-        assertEquals(result.homeScore, jdbc.queryForObject("SELECT home_score FROM game_match", Int::class.java))
-        assertEquals(result.outcome.name, jdbc.queryForObject("SELECT outcome FROM game_match", String::class.java))
-        assertEquals(14, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(result.homeScore, receipt.path("match").path("homeScore").asInt())
+        assertEquals(result.outcome.name, receipt.path("match").path("outcome").asString())
+        assertEquals(19, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertFailsWith<DataIntegrityViolationException> {
+            jdbc.update(
+                "INSERT INTO game_match SELECT gen_random_uuid(), profile_id, owned_player_id, mode, source_type, source_id, home_score, away_score, outcome, seed, engine_version, request_snapshot, events, statistics, gen_random_uuid(), created_at, rewards, stadium_id, home_penalties, away_penalties, series_id, expected_series_id, round_number FROM game_match",
+            )
+        }
+        val seriesId =
+            UUID.fromString(
+                receipt
+                    .path("rewards")
+                    .path("series")
+                    .path("id")
+                    .asString(),
+            )
+        assertFailsWith<DataIntegrityViolationException> {
+            jdbc.update(
+                "INSERT INTO user_trophy(profile_id, trophy_id, stadium_id, match_id, won_at, series_id) VALUES (?, 'trophy_benfica', 'benfica_stadium', ?, now(), ?)",
+                p.profileId,
+                UUID.fromString(receipt.path("match").path("id").asString()),
+                seriesId,
+            )
+        }
+        assertEquals(0, count("user_trophy"))
     }
 
     @Test
-    fun `database prevents foreign profile trophy duplicate trophy invalid opponent slots and stadium draws`() {
+    fun `penalty duels grant trophy only after five consecutive wins`() {
         val p = player()
-        val other = player()
-        putLineup(p, five(p))
-        val win = body(play(p))
-        assertFailsWith<DataIntegrityViolationException> { jdbc.update("UPDATE user_trophy SET profile_id = ?", other.profileId) }
-        assertFailsWith<DataIntegrityViolationException> { jdbc.update("INSERT INTO user_trophy SELECT * FROM user_trophy") }
-        assertFailsWith<DataIntegrityViolationException> {
-            jdbc.update(
-                "UPDATE stadium_opponent_player SET slot_index = 6 WHERE slot_index = 1",
-            )
-        }
-        assertFailsWith<DataIntegrityViolationException> {
-            jdbc.update(
-                "UPDATE game_match SET home_score = 0, away_score = 0, outcome = 'DRAW' WHERE id = ?",
-                UUID.fromString(win.path("match").path("id").asString()),
-            )
-        }
-    }
-
-    @Test
-    fun `penalty victory stores separate scores awards trophy and unlocks data driven requirements`() {
-        val p = player()
-        putLineup(p, five(p))
-        jdbc.update("INSERT INTO trophy_definition VALUES ('fixture_trophy', 'Fixture', 'Fixture') ON CONFLICT DO NOTHING")
-        jdbc.update(
-            "INSERT INTO stadium SELECT 'fixture_stadium', name, type, map_id, 'fixture.entry', difficulty, keeper_base, 'fixture_trophy', enabled FROM stadium WHERE id = 'benfica_stadium' ON CONFLICT DO NOTHING",
-        )
-        jdbc.update(
-            "INSERT INTO stadium_opponent_player SELECT 'fixture_stadium', slot_index, player_definition_id, level FROM stadium_opponent_player WHERE stadium_id = 'benfica_stadium' ON CONFLICT DO NOTHING",
-        )
-        jdbc.update("INSERT INTO stadium_requirement VALUES ('fixture_stadium', 'trophy_benfica')")
-        assertEquals("LOCKED", body(get(p, "/stadiums/fixture_stadium")).path("status").asString())
         engine.shootout = true
-        val key = UUID.randomUUID()
-        val win = body(play(p, key))
-        assertEquals(0, win.path("match").path("homeScore").asInt())
-        assertEquals(
-            1,
-            win
-                .path("match")
-                .path("penalties")
-                .path("home")
-                .asInt(),
-        )
-        assertEquals("WIN", win.path("match").path("outcome").asString())
-        assertEquals(win, body(play(p, key)))
-        assertEquals(1, count("user_trophy"))
-        assertTrue(win.path("match").path("events").all { it.path("homeScore").asInt() == 0 })
-        assertEquals("AVAILABLE", body(get(p, "/stadiums/fixture_stadium")).path("status").asString())
+        repeat(5) { index ->
+            val key = UUID.randomUUID()
+            val cmd = command(p)
+            val receipt = body(play(p, key, cmd))
+            assertEquals(
+                1,
+                receipt
+                    .path("match")
+                    .path("penalties")
+                    .path("home")
+                    .asInt(),
+            )
+            assertEquals(receipt, body(play(p, key, cmd)))
+            assertEquals(if (index == 4) 1 else 0, count("user_trophy"))
+        }
     }
 
     private fun five(p: Player): List<UUID> {
@@ -332,7 +367,21 @@ class MilestoneSixIntegrationTest {
     private fun play(
         p: Player,
         key: UUID = UUID.randomUUID(),
-    ) = send(p.client, "POST", "/stadiums/benfica_stadium/matches", "{}", key)
+        command: String = command(p),
+    ) = send(p.client, "POST", "/stadiums/benfica_stadium/matches", command, key)
+
+    private fun command(p: Player): String {
+        val info = body(get(p, "/stadiums/benfica_stadium"))
+        val series = info.path("series")
+        val round = if (series.isNull || series.path("finished").asBoolean()) 1 else series.path("played").asInt() + 1
+        return json.writeValueAsString(
+            mapOf(
+                "ownedPlayerId" to p.ownedId,
+                "roundNumber" to round,
+                "seriesId" to if (series.isNull) null else series.path("id").asString(),
+            ),
+        )
+    }
 
     private fun playerWithStarter(starter: String): Player {
         val client = client()

@@ -1,4 +1,4 @@
-import { uniformUrl } from '../team/teamColors'
+import { ownedPlayerUniformUrl } from '../team/teamColors'
 import type { RosterPlayer } from '../../api/gameApi'
 
 /** Native radios provide one selection and keyboard navigation; the cards are presentation only. */
@@ -31,7 +31,7 @@ export class PlayerCards {
       const sprite = face.querySelector<HTMLElement>('.player-card-sprite')!
       const asset = player.playerDefinitionId?.startsWith('npc_') ? 'challenger' : 'player'
       sprite.dataset.asset = asset
-      sprite.style.backgroundImage = `url("${uniformUrl(asset)}")`
+      sprite.style.backgroundImage = `url("${ownedPlayerUniformUrl(player.playerDefinitionId)}")`
       const name = document.createElement('strong')
       name.textContent = player.name
       const level = document.createElement('span')

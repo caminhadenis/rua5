@@ -1,27 +1,30 @@
-import { describe, expect, it } from 'vitest'
-import { actingPosition, coachVerdict, pitchPosition } from './stadiumPresentation'
+import { expect, it } from 'vitest'
+import { coachGreeting, coachVerdict } from './stadiumPresentation'
 import type { StadiumResponse } from '../../api/gameApi'
 
-const home = Array.from({ length: 5 }, (_, i) => ({ playerId: `home${i}`, name: `Casa ${i}`, level: 5 }))
-const away = Array.from({ length: 5 }, (_, i) => ({ playerId: `away${i}`, name: `Fora ${i}`, level: 6 }))
-function result(outcome: 'WIN' | 'LOSS', type: 'SHOT_MISSED' | 'PASS' = 'PASS', penalties: StadiumResponse['match']['penalties'] = null): StadiumResponse {
+function result(won: boolean, played: number): StadiumResponse {
   return {
-    match: { id: 'match', home, away, mode: 'STADIUM_5V5', homeScore: outcome === 'WIN' ? 2 : 0, awayScore: outcome === 'WIN' ? 1 : 2, outcome, penalties,
-      events: [{ sequence: 1, minute: 10, type, side: 'HOME', actorPlayerId: 'home2', homeScore: 0, awayScore: 0 }] },
-    rewards: { players: [], trophy: outcome === 'WIN' ? { id: 'cup', name: 'Taça do Benfica' } : null },
+    match: { id: 'm', home: [], away: [], mode: 'STADIUM_1V1', homeScore: won ? 1 : 0, awayScore: won ? 0 : 1,
+      outcome: won ? 'WIN' : 'LOSS', penalties: null, events: [] },
+    rewards: { players: [], trophy: won && played === 5 ? { id: 'cup', name: 'Taça do Benfica' } : null,
+      series: { id: 's', played, wins: played - (won ? 0 : 1), finished: !won || played === 5 } },
   }
 }
-
-describe('stadium presentation', () => {
-  it('ties victory and defeat dialogue to the authoritative result and observed events', () => {
-    expect(coachVerdict(result('WIN')).join(' ')).toContain('Taça do Benfica')
-    expect(coachVerdict(result('LOSS', 'SHOT_MISSED')).join(' ')).toContain('finalização')
-    expect(coachVerdict(result('LOSS')).join(' ')).toContain('defesa')
-    expect(coachVerdict(result('LOSS', 'PASS', { home: 3, away: 4 })).join(' ')).toContain('pênaltis')
-  })
-  it('places both teams and moves only the recorded actor towards the ball', () => {
-    expect(pitchPosition('HOME', 0).x).toBeLessThan(50)
-    expect(pitchPosition('AWAY', 0).x).toBeGreaterThan(50)
-    expect(actingPosition(result('WIN').match.events[0]!, [...home, ...away])).toEqual({ x: 47, y: 24 })
-  })
+it('coach explains five consecutive individual wins and resets on loss', () => {
+  expect(coachGreeting.join(' ')).toContain('cinco')
+  expect(coachGreeting.join(' ')).toContain('mais forte')
+  expect(coachVerdict(result(true, 1)).join(' ')).toContain('1/5')
+  expect(coachVerdict(result(true, 3)).join(' ')).not.toContain('Receba')
+  expect(coachVerdict(result(true, 5)).join(' ')).toContain('Taça do Benfica')
+  expect(coachVerdict(result(false, 4)).join(' ')).toContain('primeiro adversário')
+})
+it('coach announces the actual next opponent and reserves strongest-player wording for the last duel', () => {
+  const next = { playerId: 'tito', name: 'Tito', level: 6 }
+  const lines = coachVerdict(result(true, 1), next).join(' ')
+  expect(lines).toContain('Gostei do que vi')
+  expect(lines).toContain('Agora vou colocar Tito')
+  expect(lines).not.toContain('mais forte')
+  expect(coachVerdict(result(true, 4), next).join(' ')).toContain('meu jogador mais forte')
+  expect(coachVerdict(result(false, 1), next).join(' ')).not.toContain('Agora vou colocar')
+  expect(coachVerdict(result(true, 5), next).join(' ')).not.toContain('próximo duelo')
 })

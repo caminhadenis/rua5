@@ -248,7 +248,7 @@ class MilestoneFiveIntegrationTest {
                 ),
             )
             assertEquals(
-                14,
+                19,
                 upgrade.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success AND type = 'SQL'", Int::class.java),
             )
         }

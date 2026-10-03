@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { RESIDENTS } from '../maps/residents'
 import { INTERIORS } from '../maps/locations'
 import { drawNeighborhoodArt } from '../maps/NeighborhoodArt'
-import { applyStarterAppearance } from '../team/teamColors'
+import { applyStarterAppearance, challengerAsset } from '../team/teamColors'
 import { ApiError, DuelCommand, request, stadiumApi, teamApi, type DuelResponse, type RosterPlayer } from '../../api/gameApi'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 
@@ -66,7 +66,7 @@ export class WorldScene extends Phaser.Scene {
     this.physics.add.collider(this.player, obstacles)
     this.npcs = [...CHALLENGERS, ...RESIDENTS].map((content, index) => {
       const target = this.getMapPoint(map, 'interactions', content.spawnKey)
-      const challengerTexture = ['challenger', 'challenger-curls', 'challenger-headband'][index % 3]!
+      const challengerTexture = content.kind === 'challenger' ? challengerAsset(content.playerDefinitionId) : 'challenger'
       const sprite = this.physics.add.staticImage(target.x, target.y, content.kind === 'resident' ? content.sprite : challengerTexture)
       sprite.body.setSize(18, 14).setOffset(7, 26)
       sprite.setDepth(sprite.y)
@@ -198,7 +198,7 @@ export class WorldScene extends Phaser.Scene {
     const nearbyNpc = this.npcs.find(npc => npc.sprite.active && canInteract(this.player.body.center, npc.sprite.body.center))
     for (const npc of this.npcs) {
       if (npc.content.kind === 'challenger' && npc.sprite.active && !this.encounterLocked &&
-          npc.approach.update(this.player.body.center, npc.sprite.body.center, npc.facing)) {
+          npc.approach.update(this.player.body.center, npc.sprite.body.center)) {
         this.beginChallengerApproach(npc)
         return
       }
@@ -208,7 +208,7 @@ export class WorldScene extends Phaser.Scene {
       if (enter && this.hud.canChallenge) { void this.choosePlayer(); return }
       if (interact || enter || escape) this.hud.closeDialogue()
     } else if ((interact || enter) && nearby &&
-      (nearbyNpc!.content.kind === 'resident' || canDetectChallenger(this.player.body.center, nearbyNpc!.sprite.body.center, nearbyNpc!.facing))) {
+      (nearbyNpc!.content.kind === 'resident' || canDetectChallenger(this.player.body.center, nearbyNpc!.sprite.body.center))) {
       const content = nearbyNpc!.content
       if (content.kind === 'challenger') this.activeChallenger = content
       this.hud.openDialogue(content.name, content.dialogue, false, content.kind)
@@ -385,7 +385,7 @@ export class WorldScene extends Phaser.Scene {
     this.hud.closeDialogue()
     this.input.keyboard!.resetKeys()
     this.scene.sleep()
-    this.scene.run('StadiumScene', { id: this.stadiumId ?? 'benfica_stadium' })
+    this.scene.run('InteriorScene', { key: 'benfica.stadium.entry', stadiumId: this.stadiumId ?? 'benfica_stadium' })
   }
 
   private enterInterior(key: string): void {

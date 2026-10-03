@@ -22,6 +22,7 @@ async function worldState(page: Page) {
       right: scene.player.body.right as number,
       npcLeft: scene.challenger.body.left as number,
       npcX: scene.challenger.x as number,
+      npcY: scene.challenger.y as number,
       npcAngle: scene.challenger.angle as number,
       approaching: scene.encounterLocked as boolean,
       scrollX: scene.cameras.main.scrollX as number,
@@ -73,6 +74,7 @@ test('open map, walk, collide, follow camera and meet the challenger', async ({ 
   await page.keyboard.down('d')
   await expect.poll(async () => (await worldState(page))!.approaching, { timeout: 7000, intervals: [20] }).toBe(true)
   const detected = (await worldState(page))!
+  expect(Math.hypot(detected.x - detected.npcX, detected.y - detected.npcY)).toBeGreaterThan(60)
   expect(detected.dialogue).toBe(false)
   expect(detected.npcAngle).toBe(0)
   await page.keyboard.press('e', { delay: 40 })
@@ -114,7 +116,7 @@ test('open map, walk, collide, follow camera and meet the challenger', async ({ 
   await page.keyboard.press('e', { delay: 80 })
   await expect.poll(async () => (await worldState(page))!.dialogue).toBe(false)
   await page.keyboard.down('ArrowLeft')
-  await expect.poll(async () => (await worldState(page))!.x).toBeLessThan(700)
+  await expect.poll(async () => (await worldState(page))!.x).toBeLessThan(650)
   await page.keyboard.up('ArrowLeft')
   await page.keyboard.down('ArrowRight')
   await expect.poll(async () => (await worldState(page))!.dialogue).toBe(true)
@@ -251,8 +253,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
         const interior = game.scene.getScene('InteriorScene')
         return interior.dialogue?.list[1]?.text as string
       })
-      expect(trainerWords).toContain('5 treinos no mesmo setor')
-      expect(trainerWords).toContain('o atributo não muda na partida')
+      expect(trainerWords).toContain('Cinco treinos do mesmo fundamento dão +1')
       const center = await page.evaluate(async () => {
         const { game } = await import('/src/main.ts')
         const interior = game.scene.getScene('InteriorScene')
@@ -261,7 +262,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
           trainees: interior.children.list.filter((child: { name?: string }) => child.name?.startsWith('training-athlete-')).length as number,
         }
       })
-      expect(center).toEqual({ coaches: 6, trainees: 6 })
+      expect(center).toEqual({ coaches: 6, trainees: 0 })
       await page.keyboard.press('Escape', { delay: 80 })
     }
     await page.keyboard.down('ArrowRight')

@@ -9,9 +9,13 @@ import com.streetfootball.game.match.domain.MatchStatistics
 import com.streetfootball.game.match.domain.PenaltyScore
 import com.streetfootball.game.profile.ProfileSession
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
@@ -35,9 +39,10 @@ class StadiumController(
     fun play(
         @PathVariable id: String,
         @RequestHeader("Idempotency-Key") key: UUID,
+        @Valid @RequestBody command: StadiumDuelCommand,
         request: HttpServletRequest,
     ): StadiumResponse {
-        val stored = service.play(session.requireProfileId(request), id, key)
+        val stored = service.play(session.requireProfileId(request), id, key, command)
         val result = stored.result
         return StadiumResponse(
             StadiumMatchResponse(
@@ -60,6 +65,12 @@ class StadiumController(
         )
     }
 }
+
+data class StadiumDuelCommand(
+    val ownedPlayerId: UUID,
+    @field:Min(1) @field:Max(5) val roundNumber: Int,
+    val seriesId: UUID? = null,
+)
 
 data class StadiumResponse(
     val match: StadiumMatchResponse,

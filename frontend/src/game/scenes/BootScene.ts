@@ -29,8 +29,8 @@ export class BootScene extends Phaser.Scene {
       this.load.svg(`resident-${variant}`, `${base}assets/placeholders/resident-${variant}.svg`)
     }
     this.load.svg('challenger', originalUniformUrls['challenger'])
-    this.load.svg('challenger-curls', `${base}assets/placeholders/challenger-curls.svg`)
-    this.load.svg('challenger-headband', `${base}assets/placeholders/challenger-headband.svg`)
+    this.load.svg('challenger-curls', originalUniformUrls['challenger-curls'])
+    this.load.svg('challenger-headband', originalUniformUrls['challenger-headband'])
   }
 
   create(): void {

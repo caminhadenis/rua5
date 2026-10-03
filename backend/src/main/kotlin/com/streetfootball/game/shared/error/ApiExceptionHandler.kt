@@ -30,8 +30,12 @@ import java.util.UUID
 class ApiExceptionHandler {
     @ExceptionHandler(TrainingCooldownException::class)
     fun trainingCooldown(exception: TrainingCooldownException): ResponseEntity<ApiError> =
-        error(HttpStatus.CONFLICT, "TRAINING_COOLDOWN", "Aguarde um minuto antes de iniciar outro treino.",
-            mapOf("nextAvailableAt" to exception.nextAvailableAt.toString()))
+        error(
+            HttpStatus.CONFLICT,
+            "TRAINING_COOLDOWN",
+            "Aguarde um minuto antes de treinar este atleta novamente.",
+            mapOf("nextAvailableAt" to exception.nextAvailableAt.toString()),
+        )
 
     @ExceptionHandler(TrainingStatMaxException::class)
     fun trainingStatMax(): ResponseEntity<ApiError> =
@@ -45,7 +49,7 @@ class ApiExceptionHandler {
     fun stadiumRule(exception: com.streetfootball.game.stadium.StadiumRuleException): ResponseEntity<ApiError> {
         val message =
             when (exception.code) {
-                "LINEUP_INCOMPLETE" -> "Escale cinco jogadores diferentes para entrar no estádio."
+                "STADIUM_SEQUENCE_CHANGED" -> "A sequência avançou. Atualize o estádio antes de iniciar outro duelo."
                 "STADIUM_ALREADY_COMPLETED" -> "Este estádio já foi conquistado."
                 "STADIUM_REQUIREMENT_NOT_MET" -> "Conquiste os troféus necessários para entrar."
                 else -> "Estádio não encontrado ou indisponível."
