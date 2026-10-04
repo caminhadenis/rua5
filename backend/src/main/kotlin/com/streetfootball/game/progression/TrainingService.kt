@@ -25,8 +25,8 @@ data class TrainingResult(
     val currentXp: Int,
     val xpToNextLevel: Int?,
     val nextAvailableAt: Instant,
-    val statBefore: Int?,
-    val statAfter: Int?,
+    val statBefore: Double?,
+    val statAfter: Double?,
     val progressBefore: Int?,
     val progressAfter: Int?,
 )
@@ -126,8 +126,8 @@ class TrainingService(
                             row.getTimestamp("trained_at").toInstant().plus(
                                 if (row.getObject("stat_before") == null) java.time.Duration.ofSeconds(90) else TrainingPolicy.cooldown,
                             ),
-                            row.getObject("stat_before") as Int?,
-                            row.getObject("stat_after") as Int?,
+                            (row.getObject("stat_before") as Number?)?.toDouble(),
+                            (row.getObject("stat_after") as Number?)?.toDouble(),
                             (row.getObject("progress_before") as Number?)?.toInt(),
                             (row.getObject("progress_after") as Number?)?.toInt(),
                         )

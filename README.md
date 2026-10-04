@@ -85,6 +85,35 @@ npm run dev
 
 Abra `http://localhost:5173`. O healthcheck do backend responde em `http://localhost:8080/health`.
 
+## Jogar no celular
+
+Os controles aparecem automaticamente apenas em celulares. Gire o aparelho para a
+horizontal: segure ou arraste o dedo no direcional à esquerda para andar, inclusive
+na diagonal. À direita, use a ação indicada (conversar, entrar, desafiar ou treinar),
+Fechar/Sair e Equipe. Menus, seleção de atletas e partidas são operados por toque.
+Tela cheia é opcional nos navegadores que a oferecem. No PC continuam os controles
+por teclado e o layout habitual, mesmo com a janela estreita.
+
+Para testar em um celular na mesma rede Wi-Fi, mantenha o backend local ativo e rode
+o frontend de desenvolvimento com acesso pela rede:
+
+```bash
+cd frontend
+npm run dev -- --host 0.0.0.0
+```
+
+No celular, abra `http://<IP-local-do-computador>:5173` (ou a porta informada pelo
+Vite). O proxy do Vite encaminha a API ao backend local. As portas do Compose
+continuam limitadas a `127.0.0.1`; esse acesso pela rede usa o servidor do Vite.
+Se a porta 5173 já estiver ocupada pelo Compose, especifique `--port 5175`.
+
+Validação dos controles contra o backend ativo:
+
+```bash
+cd frontend
+E2E_REUSE_BACKEND=1 npm run test:e2e -- mobile.spec.ts --workers=1
+```
+
 ## API do Milestone 1
 
 Enquanto a autenticação não é ativada, o backend associa o perfil a uma sessão HTTP criada
@@ -179,19 +208,19 @@ Uma sessão existente entra no mundo com seu elenco persistido.
   vitória, incentivo na derrota ou reação ao empate. **REVANCHE / Enter** abre a seleção novamente.
 - Ao vencer Nilo, **Convidar para o time** fica disponível no resultado e na tela Equipe.
   O convite cria somente um jogador, mesmo após retries, revanches ou cliques simultâneos.
-- **Equipe / T:** abrir o elenco, consultar atributos, selecionar um cartão e clicar em um
-  dos cinco slots. **Salvar escalação** persiste a equipe; slots vazios são permitidos.
-  Mover um jogador esvazia seu slot anterior. **Retirar** deixa o jogador na reserva.
-- O conteúdo permite starter + oito recrutáveis. Vença quatro NPCs, convide-os e salve
-  um atleta próprio para disputar o estádio. Os demais são alternativas opcionais.
+- **Equipe / T:** abrir o elenco e selecionar um cartão para consultar seus atributos,
+  além dos convites e conquistas. Não há slots de posição ou escalação para salvar.
+- Um atleta próprio é suficiente para disputar o estádio. Escolha quem vai jogar
+  antes de cada duelo 1x1; os demais atletas são alternativas opcionais.
 
-### API de recrutamento e lineup
+### API de recrutamento e elenco
 
 - `GET /api/v1/challenges/{id}`: status `LOCKED`, `AVAILABLE` ou `RECRUITED` e histórico da sessão.
 - `POST /api/v1/challenges/{id}/recruit`: sem body obrigatório; idempotente por perfil/desafiante,
   sem necessidade de `Idempotency-Key`. Retorna `{challengerId, ownedPlayerId}` estável.
 - `GET /api/v1/roster`: elenco da sessão, com nível, XP, arquétipo, função e stats efetivos.
 - `GET /api/v1/lineup` e `PUT /api/v1/lineup`: `{ "ownedPlayerIds": ["<id>", null, null, null, null] }`.
+  Contrato legado mantido por compatibilidade, sem uso pela tela Equipe ou pelos duelos.
   O array deve ter cinco posições, sem IDs repetidos e somente com jogadores da sessão.
   PUT substitui a escalação inteira em uma transação e pode ser repetido com segurança.
 
@@ -217,11 +246,12 @@ e respeita os limites do bairro. O diálogo e a seleção pausam o movimento.
 Entre no **Centro de Treinamento do Benfica** pela porta do prédio marcado no mapa.
 Lá dentro há seis setores com atletas treinando. Aproxime-se do treinador do setor
 desejado, pressione **E** para conversar e **Enter** para escolher um atleta. Clique em
-**Começar treino**. A atividade do atleta escolhido dura 5 segundos. São necessários
-5 treinos do mesmo fundamento com o mesmo atleta para ganhar +1 nesse atributo, até 99.
-O progresso e quantos faltam aparecem na tela de treino. Antes do quinto, a habilidade
-e o desempenho na partida não mudam. A treinadora Jo explica a regra ao entrar no
-centro. O treino não concede XP. Cada atleta tem seu próprio intervalo de 1 minuto;
+**Começar treino**. A atividade do atleta escolhido dura 5 segundos. Cada treino
+concede +0,25 no fundamento escolhido, até 99; quatro sessões somam +1. A melhora
+fracionada aparece na tela e já vale nas próximas partidas. A treinadora Jo explica
+a regra ao entrar no centro. O treino não concede XP nem aumenta o nível; o nível
+sobe com XP das partidas e concede +1 em todos os atributos.
+Cada atleta tem seu próprio intervalo de 1 minuto;
 outro atleta pode treinar imediatamente. A melhora aparece em Equipe e vale nas próximas
 partidas. Cada departamento tem um treinador; converse com ele e pressione Enter para
 abrir a escolha do atleta.
@@ -229,9 +259,12 @@ abrir a escolha do atleta.
 `POST /api/v1/training/sessions` recebe `Idempotency-Key: <uuid>` e JSON
 `{"ownedPlayerId":"<uuid>","focus":"DRIBBLING"}`. Os focos aceitos são
 `SPEED`, `DRIBBLING`, `PASSING`, `FINISHING`, `DEFENDING` e `PHYSICAL`.
-`GET /api/v1/training/status` retorna `cooldowns` por `ownedPlayerId` e progresso por
-atleta e fundamento. A resposta do comando contém atributo e progresso
-anterior/atual, além de `nextAvailableAt`. O servidor valida
+`GET /api/v1/training/status` retorna `cooldowns` por `ownedPlayerId`; os campos de
+progresso são mantidos para compatibilidade, com zero após novas sessões. A resposta
+do comando contém atributo anterior/atual (agora aceitando quartos de ponto) e
+`nextAvailableAt`. A V20 preserva os bônus existentes ao convertê-los em quartos
+de ponto inteiros no banco; não concede recompensas retroativas por sessões parciais.
+O servidor valida
 posse, aplica cooldown e persiste a recompensa de forma transacional. Repetir a
 mesma chave recupera o resultado; nova chave antes do prazo retorna
 `409 TRAINING_COOLDOWN`.
@@ -327,9 +360,10 @@ Os testes criam perfis novos no banco configurado. Usam teclado real para caminh
 selecionam starter, desafiam Nilo pela API real e verificam timeline, acelerar, pular,
 conclusão temporal, recompensa, roster e reload. Um teste perde deliberadamente a resposta
 após o commit e confirma que o retry não duplica XP. O smoke de M5 também perde as respostas
-de recrutamento e PUT do lineup, recupera os comandos e valida persistência após reload.
-Uma fixture adicional cobre cinco escalados, reservas, movimento e remoção entre slots.
-Capturas ficam em `frontend/test-results/`. Vitest cobre playback, seleção de lineup,
+de recrutamento, recupera o comando e valida persistência após reload.
+Uma fixture adicional cobre consulta de mais de cinco atletas, atributos fracionados,
+navegação por teclado e ausência de chamadas à API legada de lineup.
+Capturas ficam em `frontend/test-results/`. Vitest cobre playback,
 apresentação de eventos, API/retry, movimento e integridade do mapa.
 
 Validação sintática do Compose:
@@ -436,7 +470,7 @@ ou dependências extras). O botão **Som** permite silenciar e lembra a preferê
 Requisições têm timeout de 15 segundos e as telas oferecem recuperação. A mesma chave é
 mantida em retries de partida; resultados e recompensas vêm sempre do servidor.
 
-Reload restaura perfil/starter, XP/nível, recrutamentos, lineup e troféu do PostgreSQL,
+Reload restaura perfil/starter, XP/nível, recrutamentos e troféu do PostgreSQL,
 enquanto a sessão HTTP continuar válida. A posição volta à entrada. A sessão ainda não
 é uma conta persistente entre reinícios do backend; autenticação pública permanece fora
 deste milestone.
@@ -470,13 +504,13 @@ POSTGRES_PORT=55434 docker compose -p jogorua-m7-validation down -v
 ```
 
 O teste `vertical-slice.spec.ts` cria perfil e starter pela interface, caminha com teclado,
-desafia/recruta quatro NPCs, verifica o lineup opcional, entra no estádio, conversa com
+desafia/recruta quatro NPCs, consulta o elenco sem slots, entra no estádio, conversa com
 Dimas e disputa duelos individuais até vencer os cinco consecutivamente e ganhar a taça. Não injeta
 elenco, XP, seed ou placar e não escreve SQL. Perde respostas de duelo e estádio após o
-commit para verificar idempotência; confere XP, reload, lineup, troféu e rejeição de nova
+commit para verificar idempotência; confere XP, reload, elenco, troféu e rejeição de nova
 partida. Uma captura da conquista é salva em `frontend/test-results/`.
 O antigo E2E de estádio com elenco injetado foi substituído por esse fluxo sem fixtures.
-A suíte mantém os testes de colisão, playback, recrutamento/lineup com falhas de rede e
+A suíte mantém os testes de colisão, playback, recrutamento com falhas de rede e
 adiciona recuperação de conexão e preferência de som.
 
 No backend, `MilestoneSevenIntegrationTest` completa o bairro com cada um dos três starters

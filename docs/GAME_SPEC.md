@@ -663,8 +663,9 @@ Cada nível concede +1 em todos os atributos, limitado a 99. O nível 2 já prod
 melhora, sem alterar stats base ou resultados históricos. Modificadores por arquétipo
 abaixo são possibilidades futuras, não são aplicados no cálculo atual.
 `trainingBonus` é persistido no atleta possuído, começa em zero e aumenta apenas no
-fundamento treinado ao completar cinco sessões daquele fundamento com o mesmo atleta,
-respeitando o limite efetivo de 99. O progresso parcial não altera o stat efetivo.
+fundamento treinado em +0,25 a cada sessão, respeitando o limite efetivo de 99.
+Os atributos efetivos aceitam quartos de ponto e influenciam imediatamente as partidas.
+O treino não concede XP nem altera o nível; level up continua dependendo do XP de partidas.
 
 O `archetypeModifier` pode variar por stat.
 
@@ -715,10 +716,10 @@ ou físico); a mensagem do treinador pergunta se o jogador quer treinar e inform
 fica em uma faixa compacta no alto da tela, fora da área do personagem.
 O frontend apresenta o atleta escolhido por cinco segundos na atividade correspondente:
 esteira, três cones, troca de passes, chutes a gol, perseguição ou musculação. Apenas um
-treino pode ocorrer por vez. Cada sessão soma 1/5 para o fundamento daquele atleta; só a
-quinta sessão concede +1 no atributo escolhido, sem XP, se o valor efetivo ainda for
-menor que 99. As sessões parciais não alteram atributos, nível ou desempenho em partidas.
-O progresso restante é mostrado na tela de treino, e a treinadora da academia explica
+treino pode ocorrer por vez. Cada sessão concede +0,25 no atributo escolhido, sem XP,
+se o valor efetivo ainda for menor que 99. Quatro sessões somam +1; cada ganho fracionado
+já altera o atributo efetivo e o desempenho em partidas. Nível e XP não mudam.
+O valor atual e o ganho por sessão são mostrados na tela, e a treinadora da academia explica
 a regra em diálogo automático quando o jogador entra no prédio. O treino só pode ser
 iniciado após conversar com o treinador do setor correspondente. O backend aplica
 um intervalo de um minuto por atleta; outro atleta do mesmo perfil pode treinar
@@ -726,7 +727,10 @@ imediatamente. O status retorna o próximo horário disponível por `ownedPlayer
 O comando usa `Idempotency-Key`; retry retorna o mesmo resultado sem reaplicar bônus.
 O backend deriva o perfil da sessão, valida a posse e persiste o bônus. Os snapshots de
 duelos e estádio passam a usar esse bônus; partidas históricas não mudam. Treinos não
-alteram placares ou recompensas de partidas.
+alteram placares ou recompensas de partidas já realizadas. A V20 converte os bônus
+inteiros existentes em quartos de ponto, preservando seu valor. Contadores parciais
+antigos são zerados no próximo treino daquele fundamento, sem recompensa retroativa;
+retries de sessões antigas devolvem o resultado original. Ver ADR-0009.
 
 ---
 
@@ -855,7 +859,9 @@ UNIQUE(profile_id, player_definition_id)
 
 O elenco total MAY ser maior que 5.
 
-O editor de lineup mantém cinco slots opcionais. Ele não é requisito de acesso e não controla nenhum jogo; todas as novas partidas usam um atleta por lado.
+A tela Equipe mostra o elenco, atributos, convites e conquistas, sem slots de posição
+ou editor de escalação. Todas as novas partidas usam um atleta por lado, escolhido
+antes de cada duelo.
 
 ---
 
@@ -864,7 +870,9 @@ O editor de lineup mantém cinco slots opcionais. Ele não é requisito de acess
 O elenco pode conter vários atletas. Antes de cada duelo de rua ou estádio, o jogador
 escolhe um único OwnedPlayer. Pode usar o mesmo atleta nos cinco jogos do estádio ou
 trocar entre duelos. Roles continuam descrevendo os atletas, sem posições simultâneas
-ou bônus de composição em partidas. O editor legado de cinco slots permanece opcional.
+ou bônus de composição em partidas. Não há distribuição de atletas por posições na
+tela Equipe. A API e a persistência legadas de lineup são mantidas por compatibilidade,
+sem uso pela interface ou influência nas novas partidas.
 
 # 15. Estádios e troféus
 
@@ -1372,9 +1380,9 @@ RECRUITED
 
 Ou modelagem equivalente sem estado redundante.
 
-## 19.7 user_lineup
+## 19.7 user_lineup (legado)
 
-Uma opção:
+Persistência mantida por compatibilidade, sem editor na interface:
 
 ```text
 profile_id
@@ -1584,7 +1592,10 @@ Se for necessário restaurar posição fina no mapa, MAY guardar `x/y`, mas chec
 GET /api/v1/roster
 ```
 
-## 20.7 Lineup
+## 20.7 Lineup (API legada)
+
+Mantida por compatibilidade. A tela Equipe não consulta nem salva escalações e os
+duelos não usam esse contrato.
 
 ```http
 GET /api/v1/lineup
@@ -1801,14 +1812,36 @@ Responsável por:
 
 Não deve conter regras de XP ou simulação.
 
+### Controles no navegador do celular
+
+Somente celulares (entrada por toque e menor dimensão da tela até 600 CSS pixels)
+exibem controles de toque e layout próprio. Reduzir a janela do PC não ativa esses
+controles; o desktop mantém setas/WASD, E/Enter, Esc e T.
+No celular, jogar requer orientação horizontal. Na vertical, uma tela orienta girar
+o aparelho e o movimento fica interrompido. Tela cheia é opcional quando disponível.
+O direcional à esquerda aceita toque contínuo, arraste e diagonais, com a mesma
+velocidade normalizada e colisões do teclado. À direita, a ação muda conforme o
+contexto: conversar, entrar, continuar, desafiar ou treinar; há também fechar/voltar
+e acesso à equipe no bairro. Nos interiores, sair está disponível por toque.
+Os controles ocupam faixas laterais fora do canvas; menus e partidas usam a área
+completa e seus botões existentes. Diálogos usam texto DOM legível no celular.
+Os alvos de toque têm pelo menos 44×44 CSS pixels, respeitam áreas seguras e aceitam
+dedos independentes. Soltar/cancelar o toque, perder foco, girar o aparelho ou trocar
+de scene limpa o movimento; abrir diálogo ou seleção bloqueia a locomoção.
+Não há dependência adicional, aplicativo nativo ou mudança de autoridade do backend.
+O smoke `frontend/e2e/mobile.spec.ts` cobre toque real em navegador emulado, rotação,
+ausência dos controles no PC, diálogo/duelo real e acesso à academia/estádio.
+
 ## 22.4 TeamScene
 
 - roster;
 - stats;
 - level;
 - arquétipo;
-- seleção de lineup;
-- feedback de composição.
+- consulta dos atributos de um atleta selecionado;
+- convites de recrutamento;
+- conquistas;
+- sem slots de posição ou botão de salvar escalação.
 
 ## 22.5 MatchScene
 
@@ -2239,7 +2272,7 @@ Unit:
 - parse de API;
 - playback queue;
 - mapping de event -> presentation;
-- seleção de lineup.
+- seleção individual de atletas.
 
 Smoke E2E:
 
@@ -2493,14 +2526,13 @@ NPC
 
 ---
 
-## Milestone 5 — Recrutamento + lineup
+## Milestone 5 — Recrutamento + elenco
 
 ### Entregas
 
 - recruitment;
 - roster UI;
-- lineup UI;
-- 5 slots;
+- consulta de atributos dos atletas;
 - constraints.
 
 ### Aceite
@@ -2510,7 +2542,10 @@ NPC
 - recrutar;
 - jogador aparece no roster;
 - não duplicar;
-- montar lineup.
+- consultar todos os atletas, sem limite de cinco ou slots de posição.
+
+O editor de cinco slots da entrega original foi removido após a adoção de duelos
+1x1 em todos os jogos. A API e o schema legados permanecem por compatibilidade.
 
 ---
 
@@ -2577,7 +2612,7 @@ Validação: `MilestoneSevenIntegrationTest` completa o bairro com os três star
 mede simulações com conteúdo real, incluindo os primeiros quatro duelos e a chance de completar a sequência do estádio.
 O smoke `vertical-slice.spec.ts` percorre a
 seção 37 pela interface, sem SQL/fixtures de progresso, incluindo respostas perdidas,
-recrutamento, lineup opcional, interior/treinador, duelos consecutivos, conquista, reload e bloqueio permanente do estádio.
+recrutamento, consulta do elenco, interior/treinador, duelos consecutivos, conquista, reload e bloqueio permanente do estádio.
 
 ### Aceite final do MVP
 
@@ -2997,7 +3032,7 @@ Antes de criar o segundo bairro:
 - [ ] eventos não parecem repetitivos demais;
 - [ ] XP não incentiva grind burro;
 - [ ] recrutamento funciona;
-- [ ] lineup funciona;
+- [ ] elenco e seleção individual funcionam sem slots de posição;
 - [ ] sequência 1x1 exige cinco vitórias e reinicia após derrota;
 - [ ] estádio transacional;
 - [ ] idempotência comprovada;

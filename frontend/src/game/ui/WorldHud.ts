@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 import type { RosterPlayer } from '../../api/gameApi'
+import { isPhone } from '../input/mobileViewport'
+import { MobileDialogue } from './MobileDialogue'
 
 export class WorldHud {
   private readonly rosterText: Phaser.GameObjects.Text
@@ -9,10 +11,26 @@ export class WorldHud {
   private readonly dialogueText: Phaser.GameObjects.Text
   private readonly objective: Phaser.GameObjects.Text
   private completed = false
-    isDialogueOpen = false
+  private mobileRoster = 'BENFICA'
+  private readonly mobileDialogue: MobileDialogue
+  private readonly mobileStatus = document.createElement('div')
+  isDialogueOpen = false
   canChallenge = false
 
   constructor(scene: Phaser.Scene, onChallenge: () => void) {
+    this.mobileDialogue = new MobileDialogue(scene)
+    this.mobileStatus.className = 'mobile-world-status'
+    document.getElementById('game')!.append(this.mobileStatus)
+    const hideStatus = () => { this.mobileStatus.hidden = true }
+    const showStatus = () => { this.mobileStatus.hidden = this.isDialogueOpen }
+    scene.events.on(Phaser.Scenes.Events.SLEEP, hideStatus)
+    scene.events.on(Phaser.Scenes.Events.WAKE, showStatus)
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      scene.events.off(Phaser.Scenes.Events.SLEEP, hideStatus)
+      scene.events.off(Phaser.Scenes.Events.WAKE, showStatus)
+      this.mobileStatus.remove()
+    })
+    const start = scene.children.list.length
     scene.add.rectangle(16, 16, 410, 78, 0x152b32, 0.95)
       .setOrigin(0).setScrollFactor(0).setDepth(1000)
     scene.add.text(32, 27, 'BENFICA · QUADRA DA ESQUINA', {
@@ -51,12 +69,18 @@ export class WorldHud {
     }).setInteractive({ useHandCursor: true }).on('pointerdown', onChallenge)
     this.dialogue = scene.add.container(24, scene.scale.height - 234, [panel, this.dialogueText, close, this.challengeButton])
       .setScrollFactor(0).setDepth(1002).setVisible(false)
+    if (isPhone()) {
+      for (const child of scene.children.list.slice(start)) {
+        if ('setVisible' in child) (child as Phaser.GameObjects.Text).setVisible(false)
+      }
+    }
   }
 
   setRoster(roster: RosterPlayer[]): void {
-    this.updateObjective()
     const player = roster[0]
     if (player) this.rosterText.setText(`${player.name} · Nv. ${player.level} · ${player.xp}/${player.xpToNextLevel ?? 'máx'} XP`)
+    if (player) this.mobileRoster = `BENFICA · ${player.name} · Nv. ${player.level} · ${player.xp}/${player.xpToNextLevel ?? 'máx'} XP`
+    this.updateObjective()
   }
 
   setCompleted(completed: boolean): void {
@@ -68,11 +92,14 @@ export class WorldHud {
     this.objective.setText(this.completed
       ? '★ Taça do Benfica conquistada! Bairro concluído.'
       : 'Objetivo: prepare seu atleta · Vença 5 duelos seguidos no estádio ↘')
+    this.mobileStatus.textContent = `${this.mobileRoster}\n${this.completed
+      ? '★ Taça do Benfica conquistada!'
+      : 'Prepare seu atleta · Vença 5 duelos no estádio ↘'}`
   }
 
   showPrompt(nearby: boolean, action = 'Conversar'): void {
     this.prompt.setText(`E / Enter · ${action}`)
-      .setVisible(nearby && !this.isDialogueOpen)
+      .setVisible(nearby && !this.isDialogueOpen && !isPhone())
   }
 
   openDialogue(name: string, text: string, rematch = false, kind: 'challenger' | 'resident' = 'challenger'): void {
@@ -82,12 +109,16 @@ export class WorldHud {
     this.isDialogueOpen = true
     this.prompt.setVisible(false)
     this.dialogueText.setText(`${name} · ${this.canChallenge ? 'Desafiante' : 'Morador'}\n${text}`)
-    this.dialogue.setVisible(true)
+    this.dialogue.setVisible(!isPhone())
+    this.mobileDialogue.show(`${name} · ${this.canChallenge ? 'Desafiante' : 'Morador'}`, text)
+    this.mobileStatus.hidden = true
   }
 
   closeDialogue(): void {
     this.isDialogueOpen = false
     this.canChallenge = false
     this.dialogue.setVisible(false)
+    this.mobileDialogue.close()
+    this.mobileStatus.hidden = false
   }
 }

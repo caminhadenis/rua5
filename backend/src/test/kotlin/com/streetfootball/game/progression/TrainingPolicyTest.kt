@@ -11,12 +11,12 @@ class TrainingPolicyTest {
     @Test
     fun `focused training improves only the selected stat and respects cap`() {
         val base = MatchStats(50, 60, 70, 80, 90, 98)
-        val improved = Progression.effectiveStats(base, 1, StatBonuses(dribbling = 1))
-        assertEquals(MatchStats(50, 61, 70, 80, 90, 98), improved)
-        assertEquals(61, TrainingPolicy.stat(improved, TrainingFocus.DRIBBLING))
-        assertTrue(TrainingPolicy.canImprove(98))
-        assertFalse(TrainingPolicy.canImprove(99))
-        assertEquals(99, Progression.effectiveStats(base, 2, StatBonuses(physical = 1)).physical)
+        val improved = Progression.effectiveStats(base, 1, StatBonuses(dribbling = 0.25))
+        assertEquals(MatchStats(50.0, 60.25, 70.0, 80.0, 90.0, 98.0), improved)
+        assertEquals(60.25, TrainingPolicy.stat(improved, TrainingFocus.DRIBBLING))
+        assertTrue(TrainingPolicy.canImprove(98.75))
+        assertFalse(TrainingPolicy.canImprove(99.0))
+        assertEquals(99.0, Progression.effectiveStats(base, 2, StatBonuses(physical = 0.25)).physical)
     }
 
     @Test
@@ -28,16 +28,11 @@ class TrainingPolicyTest {
     }
 
     @Test
-    fun `five sessions complete one stat point and start a new group`() {
-        var progress = 0
-        repeat(4) {
+    fun `every session grants a quarter stat point including saves with a legacy partial group`() {
+        for (progress in 0..4) {
             val step = TrainingPolicy.completeSession(progress)
-            assertFalse(step.improvesStat)
-            progress = step.progressAfter
+            assertTrue(step.improvesStat)
+            assertEquals(0, step.progressAfter)
         }
-        assertEquals(4, progress)
-        val fifth = TrainingPolicy.completeSession(progress)
-        assertTrue(fifth.improvesStat)
-        assertEquals(0, fifth.progressAfter)
     }
 }

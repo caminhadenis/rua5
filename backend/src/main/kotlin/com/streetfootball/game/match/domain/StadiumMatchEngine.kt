@@ -12,17 +12,17 @@ class StadiumMatchEngine : MatchEngine {
         fun team(side: MatchSide) = if (side == MatchSide.HOME) request.home else request.away
 
         fun keeper(side: MatchSide): Int {
-            val contribution = team(side).sumOf { it.stats.defending + it.stats.physical } / 20
+            val contribution = (team(side).sumOf { it.stats.defending + it.stats.physical } / 20).toInt()
             return ((if (side == MatchSide.HOME) 35 else request.awayKeeperBase) + contribution).coerceIn(1, 99)
         }
 
         fun pick(
             players: List<MatchParticipant>,
-            weight: (MatchStats) -> Int,
+            weight: (MatchStats) -> Double,
         ): MatchParticipant {
-            var ticket = random.nextInt(players.sumOf { weight(it.stats) })
+            var ticket = random.nextInt(players.sumOf { weight(it.stats).toInt() })
             return players.first {
-                ticket -= weight(it.stats)
+                ticket -= weight(it.stats).toInt()
                 ticket < 0
             }
         }

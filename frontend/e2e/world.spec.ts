@@ -181,10 +181,11 @@ test('houses and residents add city conversations without starting duels', async
   await page.goto('/')
   await expect.poll(() => worldState(page)).not.toBeNull()
   await page.keyboard.down('ArrowLeft')
-  await expect.poll(async () => (await worldState(page))!.x, { intervals: [20] }).toBeLessThanOrEqual(100)
+  // Approach Lia from the west, outside the newer challenger Beto's detection radius.
+  await expect.poll(async () => (await worldState(page))!.x, { intervals: [20] }).toBeLessThanOrEqual(64)
   await page.keyboard.up('ArrowLeft')
   await page.keyboard.down('ArrowDown')
-  await expect.poll(async () => (await worldState(page))!.y, { intervals: [20] }).toBeGreaterThanOrEqual(438)
+  await expect.poll(async () => (await worldState(page))!.y, { intervals: [20] }).toBeGreaterThanOrEqual(444)
   await page.keyboard.up('ArrowDown')
   expect((await worldState(page))!.dialogue).toBe(false)
   await page.keyboard.press('e', { delay: 80 })
@@ -253,7 +254,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
         const interior = game.scene.getScene('InteriorScene')
         return interior.dialogue?.list[1]?.text as string
       })
-      expect(trainerWords).toContain('Cinco treinos do mesmo fundamento dão +1')
+      expect(trainerWords).toContain('Cada treino dá +0,25 no fundamento escolhido, até 99')
       const center = await page.evaluate(async () => {
         const { game } = await import('/src/main.ts')
         const interior = game.scene.getScene('InteriorScene')

@@ -2,9 +2,9 @@ package com.streetfootball.game.match.domain
 
 // Shared bounded contest in basis points. Keep arithmetic stable for historical duel version 1.
 internal fun chance(
-    attack: Int,
-    defense: Int,
-): Int = (5000 + (attack - defense) / 2).coerceIn(1000, 9000)
+    attack: Number,
+    defense: Number,
+): Int = (5000 + ((attack.toDouble() - defense.toDouble()) / 2).toInt()).coerceIn(1000, 9000)
 
 internal fun MatchSide.opponent() = if (this == MatchSide.HOME) MatchSide.AWAY else MatchSide.HOME
 

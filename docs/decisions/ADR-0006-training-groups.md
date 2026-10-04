@@ -1,5 +1,9 @@
 # ADR-0006: Cinco treinos por ponto de atributo
 
+## Status
+
+Substituída por [ADR-0009](ADR-0009-quarter-point-training.md).
+
 ## Decisão
 
 Cada atleta possui um contador independente de zero a quatro para cada fundamento.

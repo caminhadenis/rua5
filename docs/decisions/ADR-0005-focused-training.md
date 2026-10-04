@@ -1,7 +1,8 @@
 # ADR-0005: Treino de fundamento com bônus por atleta
 
 Regra de concessão atualizada pela [ADR-0006](ADR-0006-training-groups.md):
-o bônus de +1 agora é concedido a cada cinco sessões do mesmo fundamento.
+o bônus de +1 passou a ser concedido a cada cinco sessões do mesmo fundamento.
+A regra atual está na [ADR-0009](ADR-0009-quarter-point-training.md): +0,25 por sessão.
 
 ## Decisão
 

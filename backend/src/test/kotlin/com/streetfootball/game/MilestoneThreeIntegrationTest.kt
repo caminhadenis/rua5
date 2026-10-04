@@ -127,7 +127,7 @@ class MilestoneThreeIntegrationTest {
             jdbc.queryForObject("SELECT level FROM owned_player", Int::class.java),
         )
         assertEquals(body.path("rewards").path("currentXp").asInt(), jdbc.queryForObject("SELECT xp FROM owned_player", Int::class.java))
-        assertEquals(19, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(20, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
     }
 
     @Test
@@ -142,7 +142,7 @@ class MilestoneThreeIntegrationTest {
         assertEquals(first, json.readTree(retry.body()))
         val persisted = matches.findByKey(player.profileId, key)!!
         assertEquals(
-            35,
+            35.0,
             persisted.request.away
                 .single()
                 .stats.finishing,

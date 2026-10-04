@@ -1,4 +1,6 @@
 import Phaser from 'phaser'
+import { TouchControls } from '../input/TouchControls'
+import { isPhone, isPhonePortrait } from '../input/mobileViewport'
 import { RESIDENTS } from '../maps/residents'
 import { INTERIORS } from '../maps/locations'
 import { drawNeighborhoodArt } from '../maps/NeighborhoodArt'
@@ -30,6 +32,7 @@ export class WorldScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'T' | 'ENTER' | 'ESC', Phaser.Input.Keyboard.Key>
   private walkAnimation!: PlayerWalkAnimation
+  private touch!: TouchControls
 
   constructor() {
     super('WorldScene')
@@ -52,7 +55,7 @@ export class WorldScene extends Phaser.Scene {
     this.doors = INTERIORS.map(location => {
       const point = this.getMapPoint(map, 'interactions', location.key)
       this.add.rectangle(point.x, point.y - 12, 28, 8, 0xf7d154).setDepth(2)
-      this.add.text(point.x, point.y + 10, 'ENTRAR · E', {
+      this.add.text(point.x, point.y + 10, isPhone() ? 'ENTRAR' : 'ENTRAR · E', {
         fontFamily: 'monospace', fontSize: '11px', color: '#f7d154', backgroundColor: '#152b32',
       }).setOrigin(0.5).setDepth(3)
       return { key: location.key, ...point }
@@ -118,6 +121,11 @@ export class WorldScene extends Phaser.Scene {
     this.choosing = false
     this.encounterLocked = false
     this.hud = new WorldHud(this, () => { void this.choosePlayer() })
+    this.touch = new TouchControls(this, () => {
+      if (this.player.body) this.player.setVelocity(0, 0)
+      keyboard.resetKeys()
+      this.walkAnimation.stop()
+    })
     const team = button(document.getElementById('game')!, 'Equipe · T', () => this.openTeam())
     team.className = 'world-team-button'
     const hideTeam = () => { team.hidden = true }
@@ -185,17 +193,35 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update(): void {
-    if (this.choosing) return
-    if (this.encounterLocked) { this.player.setVelocity(0, 0); return }
-    if (Phaser.Input.Keyboard.JustDown(this.keys.T)) { this.openTeam(); return }
+    if (this.choosing || isPhonePortrait() || document.getElementById('game')!.querySelector('.scene-panel')) {
+      this.touch.setContext({ visible: false })
+      this.player.setVelocity(0, 0)
+      return
+    }
+    if (this.encounterLocked) {
+      this.touch.setContext({ visible: true, movement: false })
+      this.player.setVelocity(0, 0)
+      return
+    }
+    const nearStadium = canInteract(this.player.body.center, this.stadiumPoint)
+    const nearbyDoor = this.doors.find(door => canInteract(this.player.body.center, door))
+    const nearbyNpc = this.npcs.find(npc => npc.sprite.active && canInteract(this.player.body.center, npc.sprite.body.center))
+    this.touch.setContext({
+      visible: true, movement: !this.hud.isDialogueOpen, team: true,
+      confirm: this.hud.isDialogueOpen ? (this.hud.canChallenge ? 'Desafiar' : 'Continuar')
+        : nearStadium || nearbyDoor ? 'Entrar' : nearbyNpc ? 'Conversar' : undefined,
+      back: this.hud.isDialogueOpen ? 'Fechar' : undefined,
+    })
+    const team = this.touch.input.consume('team')
+    if (Phaser.Input.Keyboard.JustDown(this.keys.T) || team) { this.openTeam(); return }
     // Consume both keys each frame so simultaneous presses cannot reopen a dialogue.
     const interact = Phaser.Input.Keyboard.JustDown(this.keys.E)
-    const enter = Phaser.Input.Keyboard.JustDown(this.keys.ENTER)
+    const confirm = this.touch.input.consume('confirm')
+    const enter = Phaser.Input.Keyboard.JustDown(this.keys.ENTER) || confirm
     if (!this.hud.isDialogueOpen && (interact || enter) && canInteract(this.player.body.center, this.stadiumPoint)) { this.openStadium(); return }
-    const nearbyDoor = this.doors.find(door => canInteract(this.player.body.center, door))
     if (!this.hud.isDialogueOpen && (interact || enter) && nearbyDoor) { this.enterInterior(nearbyDoor.key); return }
-    const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC)
-    const nearbyNpc = this.npcs.find(npc => npc.sprite.active && canInteract(this.player.body.center, npc.sprite.body.center))
+    const back = this.touch.input.consume('back')
+    const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC) || back
     for (const npc of this.npcs) {
       if (npc.content.kind === 'challenger' && npc.sprite.active && !this.encounterLocked &&
           npc.approach.update(this.player.body.center, npc.sprite.body.center)) {
@@ -213,20 +239,22 @@ export class WorldScene extends Phaser.Scene {
       if (content.kind === 'challenger') this.activeChallenger = content
       this.hud.openDialogue(content.name, content.dialogue, false, content.kind)
     }
+    const touch = this.touch.input.directions
     const velocity = movementVelocity({
-      left: this.cursors.left.isDown || this.keys.A.isDown,
-      right: this.cursors.right.isDown || this.keys.D.isDown,
-      up: this.cursors.up.isDown || this.keys.W.isDown,
-      down: this.cursors.down.isDown || this.keys.S.isDown,
+      left: this.cursors.left.isDown || this.keys.A.isDown || touch.left,
+      right: this.cursors.right.isDown || this.keys.D.isDown || touch.right,
+      up: this.cursors.up.isDown || this.keys.W.isDown || touch.up,
+      down: this.cursors.down.isDown || this.keys.S.isDown || touch.down,
     }, this.hud.isDialogueOpen || this.encounterLocked)
     this.player.setVelocity(velocity.x, velocity.y)
     this.player.setDepth(this.player.y)
     this.challenger.setDepth(this.challenger.y)
-    this.hud.showPrompt(nearby || Boolean(nearbyDoor), nearbyDoor ? 'Entrar' : 'Conversar')
+    this.hud.showPrompt(nearby || Boolean(nearbyDoor) || nearStadium, nearbyDoor || nearStadium ? 'Entrar' : 'Conversar')
   }
 
   private beginChallengerApproach(npc: typeof this.npcs[number]): void {
     this.encounterLocked = true
+    this.touch.reset()
     npc.moving = true
     npc.sprite.body.enable = false
     this.player.setVelocity(0, 0)
@@ -288,6 +316,7 @@ export class WorldScene extends Phaser.Scene {
   private async choosePlayer(): Promise<void> {
     if (this.choosing || !this.hud.canChallenge) return
     this.choosing = true
+    this.touch.setContext({ visible: false })
     this.player.setVelocity(0, 0)
     this.input.keyboard!.resetKeys()
     this.input.keyboard!.enabled = false

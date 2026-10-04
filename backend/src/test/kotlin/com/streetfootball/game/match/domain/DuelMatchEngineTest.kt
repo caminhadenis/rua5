@@ -11,6 +11,31 @@ class DuelMatchEngineTest {
     private val engine = DuelMatchEngine()
 
     @Test
+    fun `quarter points affect probability without changing integer thresholds`() {
+        for (difference in -10000..10000) {
+            assertEquals((5000 + difference / 2).coerceIn(1000, 9000), chance(10000 + difference, 10000))
+        }
+        assertTrue(chance(55 * 50.25 + 25 * 50 + 20 * 50, 5000) > chance(5000, 5000))
+        assertTrue(chance(5000, 60 * 50.25 + 20 * 50 + 20 * 50) < chance(5000, 5000))
+        val input =
+            request(42).let {
+                it.copy(
+                    home =
+                        listOf(
+                            it.home.single().copy(
+                                stats =
+                                    it.home
+                                        .single()
+                                        .stats
+                                        .copy(dribbling = 50.25),
+                            ),
+                        ),
+                )
+            }
+        assertEquals(engine.simulate(input), DuelMatchEngine().simulate(input))
+    }
+
+    @Test
     fun `version one retains its historical seed 42 fixture`() {
         val result = engine.simulate(request(42))
         val signature =

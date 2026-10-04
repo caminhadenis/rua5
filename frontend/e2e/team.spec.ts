@@ -27,7 +27,7 @@ async function expectNiloRecruited(page: Page) {
   })).toEqual({ visible: false, active: false, collision: false })
 }
 
-test('real victory → recruit with lost response → roster → lineup → reload', async ({ page }, testInfo) => {
+test('real victory → recruit with lost response → roster → attributes → reload', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -67,7 +67,6 @@ test('real victory → recruit with lost response → roster → lineup → relo
   const roster = await (await page.request.get('/api/v1/roster')).json() as RosterPlayer[]
   expect(roster).toHaveLength(2)
   const nilo = roster.find(p => p.playerDefinitionId === 'npc_nilo_01')!
-  const starter = roster.find(p => p.playerDefinitionId === 'starter_breno')!
   await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
   await page.getByRole('button', { name: 'Equipe · T' }).click()
   await expect(page.getByRole('region', { name: 'Equipe', exact: true })).toBeVisible()
@@ -77,37 +76,18 @@ test('real victory → recruit with lost response → roster → lineup → relo
     expect(svg).toContain('#2266aa')
     expect(svg).toContain('#dd3344')
   }
-  await expect(page.locator('.lineup-slot')).toHaveCount(5)
+  await expect(page.locator('.lineup-slot')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Salvar escalação' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Recrutamento · Nilo' })).toContainText('Nilo já faz parte')
-  await page.getByRole('button', { name: 'Slot 1 · Vazio', exact: true }).click()
   await page.locator('.player-card').filter({ hasText: 'Nilo' }).click()
   await expect(page.locator('.player-details')).toContainText('Marcador · Defesa')
   await expect(page.locator('.player-details')).toContainText(String(nilo.stats.defending))
-  await page.getByRole('button', { name: 'Slot 2 · Vazio', exact: true }).click()
-  const payloads: unknown[] = []
-  await page.route('**/api/v1/lineup', async route => {
-    if (route.request().method() !== 'PUT') { await route.continue(); return }
-    payloads.push(route.request().postDataJSON())
-    const response = await route.fetch()
-    if (payloads.length === 1) await route.abort('failed')
-    else await route.fulfill({ response })
-  })
-  await page.getByRole('button', { name: 'Salvar escalação' }).click()
-  await expect(page.getByRole('button', { name: 'Tentar salvar novamente' })).toBeVisible()
-  await expect(page.getByRole('radio').first()).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Slot 3 · Vazio', exact: true })).toBeDisabled()
-  await page.getByRole('button', { name: 'Tentar salvar novamente' }).click()
-  await expect(page.getByRole('status').first()).toContainText('2 / 5 escalados · Escalação salva')
-  expect(payloads).toHaveLength(2)
-  expect(payloads[0]).toEqual(payloads[1])
-  const expected = { ownedPlayerIds: [starter.id, nilo.id, null, null, null] }
-  expect(await (await page.request.get('/api/v1/lineup')).json()).toEqual(expected)
-  await page.screenshot({ path: testInfo.outputPath('team-lineup.png') })
+  await page.screenshot({ path: testInfo.outputPath('team-roster.png') })
   await page.reload()
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   await expectNiloRecruited(page)
   await page.getByRole('button', { name: 'Equipe · T' }).click()
-  await expect(page.getByRole('button', { name: 'Slot 2 · Nilo', exact: true })).toBeVisible()
+  await expect(page.locator('.lineup-slot')).toHaveCount(0)
   await expect(page.getByRole('radio')).toHaveCount(2)
   for (const sprite of await page.locator('.player-card-sprite').all()) {
     const svg = decodeURIComponent(await sprite.evaluate(el => (el as HTMLElement).style.backgroundImage))
@@ -119,43 +99,41 @@ test('real victory → recruit with lost response → roster → lineup → relo
   expect(errors).toEqual([])
 })
 
-test('five-slot editor supports full teams reserves moving and removing players', async ({ page }, testInfo) => {
-  await page.request.post('/api/v1/profiles', { data: { displayName: 'Escalação' } })
+test('team shows every athlete and their attributes without loading or saving a lineup', async ({ page }, testInfo) => {
+  await page.request.post('/api/v1/profiles', { data: { displayName: 'Elenco' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
   const [starter] = await (await page.request.get('/api/v1/roster')).json() as RosterPlayer[]
-  // UI fixture only: database tests cover five owned players and ownership constraints.
-  const roster = Array.from({ length: 6 }, (_, index) => ({ ...starter!, id: `fixture-${index}`, name: `Jogador ${index + 1}` }))
-  let saved: { ownedPlayerIds: (string | null)[] } = { ownedPlayerIds: Array(5).fill(null) }
+  // Presentation fixture: keep more than five athletes available for individual duels.
+  const roster = Array.from({ length: 6 }, (_, index) => ({
+    ...starter!, id: `fixture-${index}`, name: `Jogador ${index + 1}`,
+    stats: { ...starter!.stats, speed: 40 + index * 0.25 },
+  }))
+  const lineupRequests: string[] = []
   await page.route('**/api/v1/roster', route => route.fulfill({ json: roster }))
   await page.route('**/api/v1/lineup', async route => {
-    if (route.request().method() === 'PUT') saved = route.request().postDataJSON()
-    await route.fulfill({ json: saved })
+    lineupRequests.push(route.request().method())
+    await route.abort('failed')
   })
   await enterWorld(page)
   await page.keyboard.press('t', { delay: 80 })
-  for (let slot = 1; slot <= 5; slot++) {
-    await page.locator('.player-card').filter({ hasText: `Jogador ${slot}` }).click()
-    await page.getByRole('button', { name: `Slot ${slot} · Vazio`, exact: true }).click()
-  }
-  await page.getByRole('button', { name: 'Salvar escalação' }).click()
-  await expect(page.getByRole('status').first()).toContainText('5 / 5 escalados · Escalação salva')
-  expect(saved.ownedPlayerIds).toEqual(roster.slice(0, 5).map(p => p.id))
-  await page.screenshot({ path: testInfo.outputPath('full-lineup.png') })
-  await page.locator('.player-card').filter({ hasText: 'Jogador 1' }).click()
-  await page.getByRole('button', { name: 'Slot 3 · Jogador 3', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Slot 1 · Vazio', exact: true })).toBeVisible()
-  await page.locator('.player-card').filter({ hasText: 'Jogador 6' }).click()
-  await page.getByRole('button', { name: 'Slot 1 · Vazio', exact: true }).click()
-  await page.getByRole('button', { name: 'Retirar Jogador 2 do slot 2', exact: true }).click()
-  await page.getByRole('button', { name: 'Salvar escalação' }).click()
-  await expect(page.getByRole('status').first()).toContainText('4 / 5 escalados · Escalação salva')
-  expect(saved.ownedPlayerIds).toEqual(['fixture-5', null, 'fixture-0', 'fixture-3', 'fixture-4'])
+  await expect(page.getByRole('radio')).toHaveCount(6)
+  await expect(page.locator('.lineup-slot')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Salvar escalação|Voltar sem salvar/ })).toHaveCount(0)
+  const lastPlayer = page.getByRole('radio', { name: 'Jogador 6, nível 1', exact: true })
+  await lastPlayer.check()
+  await expect(page.locator('.player-details')).toContainText('Jogador 6')
+  await expect(page.locator('.player-details dd').first()).toHaveText('41,25')
+  await lastPlayer.press('ArrowLeft')
+  await expect(page.locator('.player-details')).toContainText('Jogador 5')
+  await expect(page.locator('.player-details dd').first()).toHaveText('41')
+  await page.screenshot({ path: testInfo.outputPath('team-attributes.png') })
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   await page.keyboard.press('t', { delay: 80 })
-  await expect(page.getByRole('button', { name: 'Slot 3 · Jogador 1', exact: true })).toBeVisible()
+  await expect(page.getByRole('radio')).toHaveCount(6)
+  await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
+  expect(lineupRequests).toEqual([])
 })
-
 
 test('inviting through the team screen removes the challenger from the neighborhood', async ({ page }) => {
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Convite na equipe' } })

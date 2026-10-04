@@ -11,7 +11,7 @@ async function state(page: Page) {
   })
 }
 
-// Only read scene coordinates. Movement, recruitment and lineup use real user controls.
+// Only read scene coordinates. Movement and recruitment use real user controls.
 async function walk(page: Page, axis: 'x' | 'y', target: number, dialogue = false, allowEarlyDialogue = false) {
   const before = await state(page)
   const positive = target > before[axis]
@@ -27,7 +27,7 @@ async function walk(page: Page, axis: 'x' | 'y', target: number, dialogue = fals
   } finally { await page.keyboard.up(key) }
 }
 
-test('authoritative MVP: new profile → explore → recruit four → lineup → stadium → trophy → reload', async ({ page }, testInfo) => {
+test('authoritative MVP: new profile → explore → recruit four → roster → stadium → trophy → reload', async ({ page }, testInfo) => {
   test.setTimeout(240_000)
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -108,12 +108,7 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
   await page.getByRole('button', { name: 'Equipe · T' }).click()
   expect(await roster()).toEqual(recruited)
   await expect(page.getByRole('radio')).toHaveCount(5)
-  for (const [index, player] of recruited.entries()) {
-    await page.locator('.player-card').filter({ hasText: player.name }).click()
-    await page.getByRole('button', { name: `Slot ${index + 1} · Vazio`, exact: true }).click()
-  }
-  await page.getByRole('button', { name: 'Salvar escalação' }).click()
-  await expect(page.getByRole('status').first()).toContainText('5 / 5 escalados · Escalação salva')
+  await expect(page.locator('.lineup-slot')).toHaveCount(0)
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
   await walk(page, 'y', 336)
   await walk(page, 'x', 2128)
@@ -121,7 +116,7 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
   await walk(page, 'x', 1936)
   await page.keyboard.press('e', { delay: 80 })
   await talkToStadiumCoach(page)
-  await expect(page.getByText('Professor Dimas · treinador')).toBeVisible()
+  await expect(page.getByText('Professor Dimas · treinador', { exact: true })).toBeVisible()
   const stadiumReceipts: StadiumResponse[] = []
   const stadiumKeys: string[] = []
   await page.route('**/stadiums/*/matches', async route => {
@@ -163,7 +158,6 @@ test('authoritative MVP: new profile → explore → recruit four → lineup →
   await page.getByRole('button', { name: 'Equipe · T' }).click()
   await expect(page.getByRole('region', { name: 'Conquistas' })).toContainText('Taça do Benfica')
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
-  expect(await (await page.request.get('/api/v1/lineup')).json()).toEqual({ ownedPlayerIds: recruited.map(p => p.id) })
   await walk(page, 'y', 336)
   await walk(page, 'x', 2128)
   await walk(page, 'y', 1320)

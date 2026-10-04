@@ -2,6 +2,7 @@ package com.streetfootball.game.roster
 
 import com.streetfootball.game.progression.StatBonuses
 import com.streetfootball.game.progression.TrainingFocus
+import com.streetfootball.game.progression.TrainingPolicy
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
@@ -30,34 +31,42 @@ class OwnedPlayerEntity(
     @field:Column(nullable = false)
     var losses: Int = 0,
     @field:Column(name = "training_speed", nullable = false)
-    var trainingSpeed: Int = 0,
+    var trainingSpeedQuarters: Int = 0,
     @field:Column(name = "training_dribbling", nullable = false)
-    var trainingDribbling: Int = 0,
+    var trainingDribblingQuarters: Int = 0,
     @field:Column(name = "training_passing", nullable = false)
-    var trainingPassing: Int = 0,
+    var trainingPassingQuarters: Int = 0,
     @field:Column(name = "training_finishing", nullable = false)
-    var trainingFinishing: Int = 0,
+    var trainingFinishingQuarters: Int = 0,
     @field:Column(name = "training_defending", nullable = false)
-    var trainingDefending: Int = 0,
+    var trainingDefendingQuarters: Int = 0,
     @field:Column(name = "training_physical", nullable = false)
-    var trainingPhysical: Int = 0,
+    var trainingPhysicalQuarters: Int = 0,
     @field:Column(name = "recruited_at", nullable = false)
     var recruitedAt: Instant = Instant.now(),
     @field:Version
     @field:Column(nullable = false)
     var version: Long = 0,
 ) {
+    // Integer quarter points preserve exact gains and previously earned whole-point bonuses.
     fun trainingBonuses() =
-        StatBonuses(trainingSpeed, trainingDribbling, trainingPassing, trainingFinishing, trainingDefending, trainingPhysical)
+        StatBonuses(
+            trainingSpeedQuarters * TrainingPolicy.STAT_GAIN,
+            trainingDribblingQuarters * TrainingPolicy.STAT_GAIN,
+            trainingPassingQuarters * TrainingPolicy.STAT_GAIN,
+            trainingFinishingQuarters * TrainingPolicy.STAT_GAIN,
+            trainingDefendingQuarters * TrainingPolicy.STAT_GAIN,
+            trainingPhysicalQuarters * TrainingPolicy.STAT_GAIN,
+        )
 
     fun increaseTraining(focus: TrainingFocus) {
         when (focus) {
-            TrainingFocus.SPEED -> trainingSpeed++
-            TrainingFocus.DRIBBLING -> trainingDribbling++
-            TrainingFocus.PASSING -> trainingPassing++
-            TrainingFocus.FINISHING -> trainingFinishing++
-            TrainingFocus.DEFENDING -> trainingDefending++
-            TrainingFocus.PHYSICAL -> trainingPhysical++
+            TrainingFocus.SPEED -> trainingSpeedQuarters++
+            TrainingFocus.DRIBBLING -> trainingDribblingQuarters++
+            TrainingFocus.PASSING -> trainingPassingQuarters++
+            TrainingFocus.FINISHING -> trainingFinishingQuarters++
+            TrainingFocus.DEFENDING -> trainingDefendingQuarters++
+            TrainingFocus.PHYSICAL -> trainingPhysicalQuarters++
         }
     }
 }

@@ -38,17 +38,19 @@ export async function openTrainingPanel(
       const title = document.createElement('h2')
       title.textContent = `Setor de ${label}`
       panel.append(title)
-      paragraph(panel, 'Cinco sessões deste fundamento dão +1. Cada atleta tem seu próprio intervalo de 1 minuto.')
+      paragraph(panel, 'Cada treino dá +0,25 neste fundamento, até 99. Cada atleta tem seu próprio intervalo de 1 minuto.')
       const cards = new PlayerCards(roster)
       panel.append(cards.element)
       const stageHolder = document.createElement('div')
       panel.append(stageHolder)
-      const progress = new Map(availability.progress.map(item => [`${item.ownedPlayerId}:${item.focus}`, item.completed]))
       const focusedPlayer = () => roster.find(player => player.id === cards.selectedId)
-      const focusedCount = () => progress.get(`${cards.selectedId}:${focus}`) ?? 0
       const renderProgress = () => {
         const display = stageHolder.querySelector<HTMLElement>('.training-progress')
-        if (display && focusedPlayer()) display.textContent = `${label} · ${focusedCount()}/5 · faltam ${5 - focusedCount()} para +1`
+        const player = focusedPlayer()
+        if (display && player) {
+          const stat = player.stats[focus.toLowerCase() as keyof RosterPlayer['stats']]
+          display.textContent = `${label} · ${stat.toLocaleString('pt-BR')}/99 · ${stat < 99 ? '+0,25 por treino' : 'máximo atingido'}`
+        }
       }
       const renderStage = () => {
         stageHolder.replaceChildren()
@@ -59,7 +61,7 @@ export async function openTrainingPanel(
       renderStage()
       const cooldown = paragraph(panel, '')
       cooldown.className = 'training-cooldown'
-      const status = paragraph(panel, 'O atributo só melhora ao completar os cinco treinos deste setor.')
+      const status = paragraph(panel, 'O treino melhora este atributo. Nível e XP aumentam com partidas.')
       status.setAttribute('role', 'status')
       const actions = document.createElement('div')
       actions.className = 'selection-actions'
@@ -118,13 +120,10 @@ export async function openTrainingPanel(
             onRosterUpdated(updated)
             nextAvailableByPlayer.set(result.ownedPlayerId, result.nextAvailableAt)
             completed = true
-            if (result.progressAfter !== null) progress.set(`${result.ownedPlayerId}:${focus}`, result.progressAfter)
             renderProgress()
-            status.textContent = result.progressAfter === null
-              ? 'Treino anterior recuperado. Confira o elenco.'
-              : result.statAfter !== result.statBefore
-                ? `${label}: ${result.statBefore} → ${result.statAfter} para ${roster.find(player => player.id === result.ownedPlayerId)!.name}!`
-                : `${label}: ${result.progressAfter}/5 concluídos. Faltam ${5 - result.progressAfter} treinos para +1.`
+            status.textContent = result.statAfter !== null && result.statBefore !== null && result.statAfter !== result.statBefore
+              ? `${label}: ${result.statBefore.toLocaleString('pt-BR')} → ${result.statAfter.toLocaleString('pt-BR')} para ${roster.find(player => player.id === result.ownedPlayerId)!.name}!`
+              : 'Treino anterior recuperado. Confira o elenco.'
             start.remove()
             cancel.disabled = false
             updateCooldown()

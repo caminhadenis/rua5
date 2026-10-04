@@ -1,4 +1,7 @@
 import Phaser from 'phaser'
+import { TouchControls } from '../input/TouchControls'
+import { isPhone, isPhonePortrait } from '../input/mobileViewport'
+import { MobileDialogue } from '../ui/MobileDialogue'
 import { PlayerWalkAnimation } from '../entities/PlayerWalkAnimation'
 import { movementVelocity } from '../input/movement'
 import { canInteract } from '../maps/interactions'
@@ -19,6 +22,8 @@ export class InteriorScene extends Phaser.Scene {
   private trainingOpen = false
   private stadiumId = 'benfica_stadium'
   private dialogueCoach = false
+  private touch!: TouchControls
+  private mobileDialogue!: MobileDialogue
 
   constructor() { super('InteriorScene') }
 
@@ -58,12 +63,12 @@ export class InteriorScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '26px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 12, y: 5 },
     }).setOrigin(0.5)
     this.add.rectangle(480, 485, 90, 24, 0x594639)
-    this.add.text(480, 478, 'SAÍDA · E', { fontFamily: 'monospace', fontSize: '16px', color: '#f7d154' }).setOrigin(0.5)
+    this.add.text(480, 478, isPhone() ? 'SAÍDA' : 'SAÍDA · E', { fontFamily: 'monospace', fontSize: '16px', color: '#f7d154' }).setOrigin(0.5)
     this.add.text(16, height - 25, this.location.kind === 'gym'
       ? 'Setas / WASD: andar   E: conversar   Enter: iniciar após conversa   Esc: sair'
       : 'Setas / WASD: andar   E / Enter: conversar ou sair   Esc: sair', {
       fontFamily: 'monospace', fontSize: '15px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 8, y: 3 },
-    }).setDepth(100)
+    }).setDepth(100).setVisible(!isPhone())
 
     this.physics.world.setBounds(80, 100, 800, 390)
     const world = this.scene.get('WorldScene') as Phaser.Scene & { player: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody }
@@ -115,6 +120,12 @@ export class InteriorScene extends Phaser.Scene {
     const keyboard = this.input.keyboard!
     this.cursors = keyboard.createCursorKeys()
     this.keys = keyboard.addKeys('W,A,S,D,E,ENTER,ESC') as typeof this.keys
+    this.touch = new TouchControls(this, () => {
+      if (this.player.body) this.player.setVelocity(0, 0)
+      keyboard.resetKeys()
+      this.walk.stop()
+    })
+    this.mobileDialogue = new MobileDialogue(this)
     const animate = (_time: number, delta: number) => this.walk.update(Boolean(this.dialogue?.visible), delta)
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, animate)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, animate))
@@ -128,14 +139,32 @@ export class InteriorScene extends Phaser.Scene {
   }
 
   update(): void {
-    if (this.trainingOpen) { this.player.setVelocity(0, 0); return }
+    if (this.trainingOpen || isPhonePortrait()) {
+      this.touch.setContext({ visible: false })
+      this.player.setVelocity(0, 0)
+      return
+    }
+    const nearby = this.people.filter(person => canInteract(this.player.body.center, person.sprite.body.center))
+      .sort((a, b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, a.sprite.x, a.sprite.y)
+        - Phaser.Math.Distance.Between(this.player.x, this.player.y, b.sprite.x, b.sprite.y))[0]
+    const dialogueOpen = Boolean(this.dialogue?.visible)
+    const nearExit = canInteract(this.player.body.center, { x: 480, y: 475 })
+    this.touch.setContext({
+      visible: true, movement: !dialogueOpen,
+      confirm: dialogueOpen ? this.dialogueCoach ? 'Desafiar' : this.dialogueFocus ? 'Treinar' : 'Continuar'
+        : nearExit ? 'Sair' : nearby ? 'Conversar' : undefined,
+      back: dialogueOpen ? 'Fechar' : 'Sair',
+    })
     const interact = Phaser.Input.Keyboard.JustDown(this.keys.E)
-    const enter = Phaser.Input.Keyboard.JustDown(this.keys.ENTER)
-    const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC)
+    const confirm = this.touch.input.consume('confirm')
+    const enter = Phaser.Input.Keyboard.JustDown(this.keys.ENTER) || confirm
+    const back = this.touch.input.consume('back')
+    const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC) || back
     if (this.dialogue?.visible) {
       this.player.setVelocity(0, 0)
       if (enter && this.dialogueCoach) {
         this.dialogue.setVisible(false)
+        this.mobileDialogue.close()
         this.dialogueCoach = false
         this.input.keyboard!.resetKeys()
         this.scene.sleep()
@@ -145,8 +174,10 @@ export class InteriorScene extends Phaser.Scene {
       if (enter && this.dialogueFocus) {
         const focus = this.dialogueFocus
         this.dialogue.setVisible(false)
+        this.mobileDialogue.close()
         this.dialogueFocus = undefined
         this.trainingOpen = true
+        this.touch.setContext({ visible: false })
         this.input.keyboard!.resetKeys()
         const world = this.scene.get('WorldScene')
         void openTrainingPanel(this, focus, () => {
@@ -155,16 +186,18 @@ export class InteriorScene extends Phaser.Scene {
         }, roster => world.events.emit('roster-updated', roster))
         return
       }
-      if (interact || enter || escape) { this.dialogue.setVisible(false); this.dialogueFocus = undefined; this.dialogueCoach = false }
+      if (interact || enter || escape) {
+        this.dialogue.setVisible(false)
+        this.mobileDialogue.close()
+        this.dialogueFocus = undefined
+        this.dialogueCoach = false
+      }
       return
     }
-    if (escape || (interact && canInteract(this.player.body.center, { x: 480, y: 475 }))) {
+    if (escape || ((interact || enter) && nearExit)) {
       this.leave()
       return
     }
-    const nearby = this.people.filter(person => canInteract(this.player.body.center, person.sprite.body.center))
-      .sort((a, b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, a.sprite.x, a.sprite.y)
-        - Phaser.Math.Distance.Between(this.player.x, this.player.y, b.sprite.x, b.sprite.y))[0]
     if ((interact || enter) && nearby) {
       this.player.setVelocity(0, 0)
       this.dialogueFocus = nearby.focus
@@ -173,11 +206,12 @@ export class InteriorScene extends Phaser.Scene {
         : nearby.role === 'trainer' || this.dialogueCoach ? 'Treinador(a)' : 'Morador')
       return
     }
+    const touch = this.touch.input.directions
     const velocity = movementVelocity({
-      left: this.cursors.left.isDown || this.keys.A.isDown,
-      right: this.cursors.right.isDown || this.keys.D.isDown,
-      up: this.cursors.up.isDown || this.keys.W.isDown,
-      down: this.cursors.down.isDown || this.keys.S.isDown,
+      left: this.cursors.left.isDown || this.keys.A.isDown || touch.left,
+      right: this.cursors.right.isDown || this.keys.D.isDown || touch.right,
+      up: this.cursors.up.isDown || this.keys.W.isDown || touch.up,
+      down: this.cursors.down.isDown || this.keys.S.isDown || touch.down,
     })
     this.player.setVelocity(velocity.x, velocity.y)
     this.player.setDepth(this.player.y)
@@ -193,6 +227,11 @@ export class InteriorScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '16px', color: '#f5ead2', wordWrap: { width: 865 }, lineSpacing: 3,
     })
     this.dialogue = this.add.container(24, 76, [background, text]).setDepth(100)
+    if (isPhone()) {
+      background.setVisible(false)
+      text.setVisible(false)
+    }
+    this.mobileDialogue.show(`${name} · ${role}`, `${words}${invitation}`)
   }
 
   private drawStadium(): void {

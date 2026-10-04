@@ -1,7 +1,6 @@
 import Phaser from 'phaser'
-import { ApiError, stadiumApi, teamApi, type RosterPlayer } from '../../api/gameApi'
+import { stadiumApi, teamApi, type RosterPlayer } from '../../api/gameApi'
 import { CHALLENGERS } from '../maps/interactions'
-import { assignSlot } from '../team/lineupSelection'
 import { PlayerCards } from '../ui/PlayerCards'
 import { recruitmentPanel } from '../ui/RecruitmentPanel'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
@@ -15,15 +14,9 @@ const stats: Record<keyof RosterPlayer['stats'], string> = {
 export class TeamScene extends Phaser.Scene {
   private panel!: HTMLElement
   private roster: RosterPlayer[] = []
-  private slots: (string | null)[] = []
-  private saved: (string | null)[] = []
-  private busy = false
-  private pendingSave?: (string | null)[]
   constructor() { super('TeamScene') }
 
   create(): void {
-    this.busy = false
-    this.pendingSave = undefined
     this.panel = scenePanel(this, 'Equipe')
     this.panel.classList.add('team-panel', 'player-selection-panel')
     const keyboard = this.input.keyboard!
@@ -37,12 +30,10 @@ export class TeamScene extends Phaser.Scene {
     this.panel.replaceChildren()
     paragraph(this.panel, 'Carregando equipe…')
     try {
-      const [roster, lineup] = await Promise.all([teamApi.roster(), teamApi.lineup()])
+      const roster = await teamApi.roster()
       if (!this.scene.isActive()) return
       this.roster = roster
       this.scene.get('WorldScene').events.emit('roster-updated', roster)
-      this.slots = [...lineup.ownedPlayerIds]
-      this.saved = [...lineup.ownedPlayerIds]
       this.render()
     } catch {
       if (!this.scene.isActive()) return
@@ -54,7 +45,6 @@ export class TeamScene extends Phaser.Scene {
   }
 
   private back(): void {
-    if (this.busy) return
     this.scene.wake('WorldScene')
     this.scene.stop()
   }
@@ -90,13 +80,7 @@ export class TeamScene extends Phaser.Scene {
         achievements.querySelector('p')!.textContent = 'Não foi possível carregar as conquistas. Abra Equipe novamente para tentar.'
       }
     })
-    paragraph(this.panel, 'Escolha um jogador do elenco e clique no slot em que ele vai jogar.').className = 'selection-description'
-    const lineup = document.createElement('div')
-    lineup.className = 'lineup-slots'
-    lineup.setAttribute('aria-label', 'Escalação com cinco slots')
-    this.panel.append(lineup)
-    const state = paragraph(this.panel, '')
-    state.setAttribute('role', 'status')
+    paragraph(this.panel, 'Selecione um jogador para consultar seus atributos. Escolha quem vai jogar antes de cada duelo 1x1.').className = 'selection-description'
     const rosterPanel = document.createElement('div')
     this.panel.append(rosterPanel)
     let cards: PlayerCards
@@ -113,7 +97,7 @@ export class TeamScene extends Phaser.Scene {
         const term = document.createElement('dt')
         term.textContent = label
         const value = document.createElement('dd')
-        value.textContent = String(player.stats[key as keyof RosterPlayer['stats']])
+        value.textContent = player.stats[key as keyof RosterPlayer['stats']].toLocaleString('pt-BR')
         list.append(term, value)
       }
       details.append(list)
@@ -129,80 +113,13 @@ export class TeamScene extends Phaser.Scene {
     const actions = document.createElement('div')
     actions.className = 'selection-actions'
     this.panel.append(actions)
-    const back = button(actions, 'Voltar ao bairro', () => this.back())
-    const save = button(actions, 'Salvar escalação', () => { void persist() })
-    const dirty = () => this.slots.some((id, index) => id !== this.saved[index])
-    const update = () => {
-      const frozen = this.busy || this.pendingSave !== undefined
-      lineup.replaceChildren()
-      this.slots.forEach((id, index) => {
-        const slot = document.createElement('div')
-        slot.className = 'lineup-slot'
-        slot.dataset.testid = `lineup-slot-${index + 1}`
-        const player = this.roster.find(p => p.id === id)
-        const choose = button(slot, `Slot ${index + 1} · ${player?.name ?? 'Vazio'}`, () => {
-          if (!cards.selectedId || frozen) return
-          this.slots = assignSlot(this.slots, index, cards.selectedId)
-          update()
-        })
-        choose.disabled = frozen || !this.roster.length
-        if (player) {
-          const remove = button(slot, `Retirar ${player.name} do slot ${index + 1}`, () => {
-            this.slots = assignSlot(this.slots, index, null)
-            update()
-          })
-          remove.className = 'remove-player'
-          remove.disabled = frozen
-        }
-        lineup.append(slot)
-      })
-      const count = this.slots.filter(Boolean).length
-      state.textContent = `${count} / 5 escalados · ${dirty() ? 'Alterações ainda não salvas' : 'Escalação salva'}`
-      save.disabled = this.busy || !dirty()
-      // An uncertain save keeps the selection frozen for an idempotent retry,
-      // but leaving is safe: reopening this scene reloads the server's lineup.
-      back.disabled = this.busy
-      back.textContent = dirty() && !this.pendingSave ? 'Voltar sem salvar' : 'Voltar ao bairro'
-      cards.disabled = frozen
-    }
-    const persist = async () => {
-      if (this.busy) return
-      this.busy = true
-      this.pendingSave ??= [...this.slots]
-      update()
-      state.textContent = 'Salvando escalação…'
-      try {
-        const result = await teamApi.saveLineup(this.pendingSave)
-        if (!this.scene.isActive()) return
-        this.slots = [...result.ownedPlayerIds]
-        this.saved = [...result.ownedPlayerIds]
-        this.busy = false
-        this.pendingSave = undefined
-        save.textContent = 'Salvar escalação'
-        update()
-      } catch (error) {
-        if (!this.scene.isActive()) return
-        this.busy = false
-        if (error instanceof ApiError && error.rejected) {
-          this.pendingSave = undefined
-          update()
-          state.textContent = 'A escalação foi recusada. Confira seu elenco e tente novamente.'
-        } else {
-          // Keep the exact selection frozen until this idempotent PUT is recovered.
-          state.textContent = 'Não foi possível confirmar a escalação. Tente salvar novamente.'
-          save.disabled = false
-          save.textContent = 'Tentar salvar novamente'
-        }
-      }
-    }
-    update()
+    button(actions, 'Voltar ao bairro', () => this.back())
     for (const challenger of CHALLENGERS) recruitmentPanel(this.panel, challenger.id, async () => {
       const roster = await teamApi.roster()
       if (!this.scene.isActive()) return
       this.roster = roster
       this.scene.get('WorldScene').events.emit('roster-updated', roster)
       renderCards()
-      update()
     })
   }
 }

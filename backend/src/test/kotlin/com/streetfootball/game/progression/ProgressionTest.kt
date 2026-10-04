@@ -44,6 +44,6 @@ class ProgressionTest {
         for (level in 2..15) {
             assertTrue(Progression.effectiveStats(base, level).speed > Progression.effectiveStats(base, level - 1).speed)
         }
-        assertEquals(1, base.speed)
+        assertEquals(1.0, base.speed)
     }
 }

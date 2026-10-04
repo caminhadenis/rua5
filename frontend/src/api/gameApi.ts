@@ -7,7 +7,6 @@ export interface RosterPlayer {
   preferredRole: 'DEFENDER' | 'MIDFIELDER' | 'ATTACKER'
   stats: Record<'speed' | 'dribbling' | 'passing' | 'finishing' | 'defending' | 'physical', number>
 }
-export interface Lineup { ownedPlayerIds: (string | null)[] }
 export interface ChallengeInfo {
   id: string; name: string; level: number; recruitable: boolean
   recruitmentStatus: 'LOCKED' | 'AVAILABLE' | 'RECRUITED'
@@ -53,8 +52,6 @@ export async function request<T>(path: string, body?: unknown, key?: string, met
 
 export const teamApi = {
   roster: () => request<RosterPlayer[]>('/roster'),
-  lineup: () => request<Lineup>('/lineup'),
-  saveLineup: (ownedPlayerIds: (string | null)[]) => request<Lineup>('/lineup', { ownedPlayerIds }, undefined, 'PUT'),
   challenge: (id: string) => request<ChallengeInfo>(`/challenges/${id}`),
   recruit: (id: string) => request<{ challengerId: string; ownedPlayerId: string }>(`/challenges/${id}/recruit`, {}),
 }

@@ -6,11 +6,13 @@ import com.streetfootball.game.match.domain.MatchRequest
 import com.streetfootball.game.match.domain.VersionedMatchEngine
 import com.streetfootball.game.match.snapshot
 import com.streetfootball.game.roster.PlayerDefinitionRepository
+import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.datasource.SingleConnectionDataSource
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -34,6 +36,56 @@ class MilestoneSevenIntegrationTest {
     @Autowired private lateinit var json: ObjectMapper
 
     @Autowired private lateinit var definitions: PlayerDefinitionRepository
+
+    @Test
+    fun `quarter point migration preserves earned bonuses and historical receipts`() {
+        val schema = "training_upgrade_${UUID.randomUUID().toString().replace("-", "")}"
+
+        fun flyway(target: String? = null): Flyway {
+            val config =
+                Flyway
+                    .configure()
+                    .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+                    .schemas(schema)
+                    .defaultSchema(schema)
+            if (target != null) config.target(target)
+            return config.load()
+        }
+        flyway("19").migrate()
+        postgres.createConnection("").use { connection ->
+            connection.schema = schema
+            val upgrade = JdbcTemplate(SingleConnectionDataSource(connection, true))
+            val profileId = UUID.randomUUID()
+            val playerId = UUID.randomUUID()
+            upgrade.update(
+                "INSERT INTO game_profile (id, display_name, created_at, updated_at) VALUES (?, 'Upgrade', now(), now())",
+                profileId,
+            )
+            upgrade.update(
+                """INSERT INTO owned_player (id, profile_id, player_definition_id, recruited_at,
+                   training_speed, training_dribbling, training_physical) VALUES (?, ?, 'starter_leo', now(), 2, 3, 98)""",
+                playerId,
+                profileId,
+            )
+            upgrade.update(
+                """INSERT INTO training_session (profile_id, idempotency_key, owned_player_id, focus, xp_awarded,
+                   previous_level, current_level, previous_xp, current_xp, trained_at, stat_before, stat_after,
+                   progress_before, progress_after) VALUES (?, ?, ?, 'DRIBBLING', 0, 1, 1, 0, 0, now(), 73, 73, 1, 2)""",
+                profileId,
+                UUID.randomUUID(),
+                playerId,
+            )
+            flyway().migrate()
+            for ((stat, quarters) in listOf("speed" to 8, "dribbling" to 12, "physical" to 392)) {
+                assertEquals(
+                    quarters,
+                    upgrade.queryForObject("SELECT training_$stat FROM owned_player WHERE id = ?", Int::class.java, playerId),
+                )
+            }
+            assertEquals(73.0, upgrade.queryForObject("SELECT stat_after FROM training_session", Double::class.java))
+            assertEquals(2, upgrade.queryForObject("SELECT progress_after FROM training_session", Int::class.java))
+        }
+    }
 
     @Test
     fun `every starter completes the neighborhood through HTTP without save fixtures`() {
@@ -119,7 +171,7 @@ class MilestoneSevenIntegrationTest {
     }
 
     @Test
-    fun `training improves stat only every fifth session and rate limits each athlete independently`() {
+    fun `training improves stat every session without XP or levels and rate limits each athlete independently`() {
         val client = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         val profileId = body(send(client, "POST", "/profiles", mapOf("displayName" to "Treino")))["id"].asString()
         val starter = body(send(client, "POST", "/profile/starter", mapOf("playerDefinitionId" to "starter_leo")))
@@ -128,21 +180,27 @@ class MilestoneSevenIntegrationTest {
         val payload = mapOf("ownedPlayerId" to playerId, "focus" to "DRIBBLING")
         val key = UUID.randomUUID()
         val before = body(send(client, "GET", "/roster"))[0]
+        // A partial group from an old save must not delay or multiply the new quarter-point gain.
+        jdbc.update(
+            "INSERT INTO owned_player_training_progress (owned_player_id, focus, sessions_completed) VALUES (?, 'DRIBBLING', 3)",
+            UUID.fromString(playerId),
+        )
         val first = body(send(client, "POST", path, payload, key))
         assertEquals(0, first["xpAwarded"].asInt())
-        assertEquals(before["stats"]["dribbling"].asInt(), first["statBefore"].asInt())
-        assertEquals(first["statBefore"], first["statAfter"])
-        assertEquals(0, first["progressBefore"].asInt())
-        assertEquals(1, first["progressAfter"].asInt())
+        assertEquals(before["stats"]["dribbling"].asDouble(), first["statBefore"].asDouble())
+        assertEquals(first["statBefore"].asDouble() + 0.25, first["statAfter"].asDouble())
+        assertEquals(3, first["progressBefore"].asInt())
+        assertEquals(0, first["progressAfter"].asInt())
         assertEquals(first, body(send(client, "POST", path, payload, key)))
         val after = body(send(client, "GET", "/roster"))[0]
         assertEquals(before["xp"], after["xp"])
+        assertEquals(before["level"], after["level"])
         assertEquals(first["statAfter"], after["stats"]["dribbling"])
         assertEquals(before["stats"]["passing"], after["stats"]["passing"])
         val status = body(send(client, "GET", "/training/status"))
         assertEquals(playerId, status["cooldowns"][0]["ownedPlayerId"].asString())
         assertEquals(first["nextAvailableAt"], status["cooldowns"][0]["nextAvailableAt"])
-        assertEquals(1, status["progress"][0]["completed"].asInt())
+        assertEquals(0, status["progress"][0]["completed"].asInt())
         assertEquals(
             1,
             jdbc.queryForObject(
@@ -172,7 +230,8 @@ class MilestoneSevenIntegrationTest {
                 ),
             )
         assertEquals(0, secondAthlete["progressBefore"].asInt())
-        assertEquals(1, secondAthlete["progressAfter"].asInt())
+        assertEquals(0, secondAthlete["progressAfter"].asInt())
+        assertEquals(secondAthlete["statBefore"].asDouble() + 0.25, secondAthlete["statAfter"].asDouble())
         assertEquals(2, body(send(client, "GET", "/training/status"))["cooldowns"].size())
         assertEquals(409, send(client, "POST", path, payload + ("focus" to "PASSING"), key).statusCode())
         val other = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
@@ -187,8 +246,10 @@ class MilestoneSevenIntegrationTest {
                 UUID.fromString(playerId),
             )
             latest = body(send(client, "POST", path, payload, UUID.randomUUID()))
-            assertEquals((session % 5), latest["progressAfter"].asInt())
-            assertEquals(before["stats"]["dribbling"].asInt() + if (session == 5) 1 else 0, latest["statAfter"].asInt())
+            assertEquals(0, latest["progressAfter"].asInt())
+            assertEquals(before["stats"]["dribbling"].asDouble() + session * 0.25, latest["statAfter"].asDouble())
+            assertEquals(before["level"], latest["currentLevel"])
+            assertEquals(before["xp"], latest["currentXp"])
         }
         assertEquals(
             5,
@@ -208,14 +269,14 @@ class MilestoneSevenIntegrationTest {
         )
         val otherFocus = body(send(client, "POST", path, payload + ("focus" to "PASSING"), UUID.randomUUID()))
         assertEquals(0, otherFocus["progressBefore"].asInt())
-        assertEquals(1, otherFocus["progressAfter"].asInt())
-        assertEquals(otherFocus["statBefore"], otherFocus["statAfter"])
+        assertEquals(0, otherFocus["progressAfter"].asInt())
+        assertEquals(otherFocus["statBefore"].asDouble() + 0.25, otherFocus["statAfter"].asDouble())
         jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
         val otherAthlete =
             body(send(client, "POST", path, mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING"), UUID.randomUUID()))
         assertEquals(0, otherAthlete["progressBefore"].asInt())
-        assertEquals(1, otherAthlete["progressAfter"].asInt())
-        assertEquals(otherAthlete["statBefore"], otherAthlete["statAfter"])
+        assertEquals(0, otherAthlete["progressAfter"].asInt())
+        assertEquals(otherAthlete["statBefore"].asDouble() + 0.25, otherAthlete["statAfter"].asDouble())
         val duel =
             body(
                 send(
@@ -227,6 +288,25 @@ class MilestoneSevenIntegrationTest {
                 ),
             )
         assertEquals(latest["statAfter"], duel["match"]["home"][0]["stats"]["dribbling"])
+        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
+        val cappedPayload = mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING")
+        val baseDribbling = definitions.findById("starter_rafa").orElseThrow().dribbling
+        jdbc.update("UPDATE owned_player SET training_dribbling = ? WHERE id = ?", (99 - baseDribbling) * 4 - 1, secondPlayer)
+        val capKey = UUID.randomUUID()
+        val capped = body(send(client, "POST", path, cappedPayload, capKey))
+        assertEquals(98.75, capped["statBefore"].asDouble())
+        assertEquals(99.0, capped["statAfter"].asDouble())
+        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
+        val maxed = send(client, "POST", path, cappedPayload, UUID.randomUUID())
+        assertEquals(409, maxed.statusCode())
+        assertEquals("TRAINING_STAT_MAX", json.readTree(maxed.body())["code"].asString())
+        // The original first receipt survives later sessions and matches without another gain.
+        val currentRoster = body(send(client, "GET", "/roster"))
+        val retried = body(send(client, "POST", path, payload, key))
+        for (field in listOf("statBefore", "statAfter", "progressBefore", "progressAfter", "currentLevel", "currentXp")) {
+            assertEquals(first[field], retried[field])
+        }
+        assertEquals(currentRoster, body(send(client, "GET", "/roster")))
     }
 
     @Test

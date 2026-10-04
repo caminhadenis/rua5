@@ -10,7 +10,9 @@ import { TeamScene } from './game/scenes/TeamScene'
 import { InteriorScene } from './game/scenes/InteriorScene'
 import './style.css'
 import { gameAudio } from './game/audio/GameAudio'
+import { installMobileViewport } from './game/input/mobileViewport'
 
+const disposeMobileViewport = installMobileViewport()
 gameAudio.install(document.getElementById('game')!)
 
 export const game = new Phaser.Game({
@@ -29,4 +31,15 @@ export const game = new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
+})
+
+// The exploration controls reserve space beside the canvas on phones.
+const resize = new ResizeObserver(() => {
+  game.scale.getParentBounds()
+  game.scale.refresh()
+})
+resize.observe(document.getElementById('game')!)
+game.events.once(Phaser.Core.Events.DESTROY, () => {
+  resize.disconnect()
+  disposeMobileViewport()
 })

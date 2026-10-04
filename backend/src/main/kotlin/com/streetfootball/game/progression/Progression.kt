@@ -62,9 +62,9 @@ object Progression {
         val growth = level - 1
 
         fun grow(
-            stat: Int,
-            bonus: Int,
-        ) = (stat + growth + bonus).coerceIn(1, 99)
+            stat: Double,
+            bonus: Double,
+        ) = (stat + growth + bonus).coerceIn(1.0, 99.0)
         return MatchStats(
             grow(base.speed, bonuses.speed),
             grow(base.dribbling, bonuses.dribbling),
@@ -77,15 +77,15 @@ object Progression {
 }
 
 data class StatBonuses(
-    val speed: Int = 0,
-    val dribbling: Int = 0,
-    val passing: Int = 0,
-    val finishing: Int = 0,
-    val defending: Int = 0,
-    val physical: Int = 0,
+    val speed: Double = 0.0,
+    val dribbling: Double = 0.0,
+    val passing: Double = 0.0,
+    val finishing: Double = 0.0,
+    val defending: Double = 0.0,
+    val physical: Double = 0.0,
 ) {
     init {
-        require(listOf(speed, dribbling, passing, finishing, defending, physical).all { it in 0..98 })
+        require(listOf(speed, dribbling, passing, finishing, defending, physical).all { it in 0.0..98.0 })
     }
 }
 

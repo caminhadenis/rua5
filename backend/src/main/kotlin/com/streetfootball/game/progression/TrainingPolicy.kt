@@ -6,9 +6,9 @@ import java.time.Instant
 
 enum class TrainingFocus { SPEED, DRIBBLING, PASSING, FINISHING, DEFENDING, PHYSICAL }
 
-/** Five drills of one focus complete a stat point; each athlete has an independent cooldown. */
+/** Each drill grants a quarter stat point; each athlete has an independent cooldown. */
 object TrainingPolicy {
-    const val SESSIONS_PER_POINT = 5
+    const val STAT_GAIN = 0.25
     val cooldown: Duration = Duration.ofMinutes(1)
 
     fun nextAvailableAt(lastTraining: Instant?): Instant? = lastTraining?.plus(cooldown)
@@ -21,7 +21,7 @@ object TrainingPolicy {
     fun stat(
         stats: MatchStats,
         focus: TrainingFocus,
-    ): Int =
+    ): Double =
         when (focus) {
             TrainingFocus.SPEED -> stats.speed
             TrainingFocus.DRIBBLING -> stats.dribbling
@@ -31,11 +31,12 @@ object TrainingPolicy {
             TrainingFocus.PHYSICAL -> stats.physical
         }
 
-    fun canImprove(stat: Int): Boolean = stat < 99
+    fun canImprove(stat: Double): Boolean = stat < 99
 
     fun completeSession(progress: Int): TrainingStep {
-        require(progress in 0 until SESSIONS_PER_POINT)
-        return TrainingStep((progress + 1) % SESSIONS_PER_POINT, progress == SESSIONS_PER_POINT - 1)
+        // Accept partial groups from older saves and clear them without retroactive rewards.
+        require(progress in 0..4)
+        return TrainingStep(0, true)
     }
 }
 
