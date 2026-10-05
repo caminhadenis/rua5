@@ -1,0 +1,164 @@
+/* Phone detection comes from mobileViewport; resizing a desktop never enables this UI. */
+.is-phone :is(.duel-selection-panel, .duel-panel, .training-panel, .stadium-panel) {
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.is-phone :is(.player-selection-panel, .training-panel, .stadium-panel) h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.is-phone :is(.player-selection-panel, .training-panel, .stadium-panel) p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.is-phone .selection-status:empty { display: none; }
+.is-phone .player-cards { margin: 0; min-height: 0; }
+.is-phone .player-cards legend { margin-bottom: 5px; font-size: 10px; letter-spacing: 1px; }
+.is-phone .player-card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; padding-bottom: 4px; }
+.is-phone .player-card-face {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: repeat(3, auto);
+  column-gap: 6px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 6px;
+  min-height: 64px;
+  box-shadow: 0 2px 0 #08151b;
+}
+.is-phone .player-card-portrait { grid-row: 1 / 4; width: 36px; height: 44px; }
+.is-phone .player-card-sprite { left: 2px; bottom: 2px; width: 32px; height: 40px; background-size: 128px 120px; }
+.is-phone .player-card-sprite[data-asset="challenger"] { background-size: 32px 40px; }
+.is-phone .player-card-face strong { font-size: 14px; padding-right: 5px; }
+.is-phone :is(.player-card-level, .player-card-xp) { font-size: 10px; }
+.is-phone .player-card-marker { position: absolute; right: 3px; top: 3px; font-size: 0; }
+.is-phone .player-card-marker::after { content: '◆'; font-size: 8px; }
+.is-phone :is(.selection-actions, .stadium-actions) {
+  margin: 0;
+  gap: 6px;
+  padding-right: 110px; /* Keep the persistent audio button clear of the main actions. */
+}
+.is-phone :is(.selection-actions, .stadium-actions, .duel-controls) button {
+  margin: 0;
+  padding: 6px 10px;
+  min-width: 44px;
+  font-size: 12px;
+}
+.is-phone .duel-selection-panel:has(.player-cards) {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
+  gap: 5px;
+}
+.is-phone .duel-selection-panel .selection-eyebrow { margin: 0; font-size: 10px; letter-spacing: 1px; }
+.is-phone .duel-selection-panel .player-cards { overflow: auto; overscroll-behavior: contain; }
+.is-phone .duel-selection-panel .selection-hint { font-size: 10px; }
+
+.is-phone .duel-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(72px, 1fr) auto auto auto;
+  gap: 5px;
+}
+.is-phone .duel-heading { font-size: 10px; letter-spacing: 0; }
+.is-phone .duel-badge { padding: 3px 6px; }
+.is-phone .duel-scoreboard { gap: 8px; padding: 0; }
+.is-phone .duel-player strong { font-size: 16px; }
+.is-phone .duel-player small { font-size: 9px; letter-spacing: 0; }
+.is-phone .duel-player > span { font-size: 10px; }
+.is-phone .duel-score { font-size: 30px; padding: 2px 14px; gap: 10px; }
+.is-phone .duel-arena { min-height: 0; max-height: none; }
+.is-phone .duelist { transform: translate(-50%, -50%) scale(.65); }
+.is-phone .duel-time { font-size: 10px; gap: 6px; letter-spacing: 0; }
+.is-phone .duel-commentary { gap: 6px; padding: 5px 8px; }
+.is-phone .duel-commentary p { font-size: 12px; }
+.is-phone .duel-controls { display: flex; align-items: center; justify-content: center; gap: 6px; padding-right: 110px; }
+.is-phone .duel-panel.is-finished {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(72px, 1fr) auto;
+}
+.is-phone .is-finished .duel-heading { grid-column: 1 / -1; }
+.is-phone .is-finished .duel-scoreboard { grid-column: 1; grid-row: 2; }
+.is-phone .is-finished :is(.duel-arena, .stadium-theater) { grid-column: 1; grid-row: 3; min-height: 0; }
+.is-phone .is-finished .duel-time { display: none; }
+.is-phone .is-finished .duel-commentary { grid-column: 1; grid-row: 4; }
+.is-phone .is-finished .duel-commentary p { white-space: normal; }
+.is-phone .is-finished .duel-controls {
+  grid-column: 2;
+  grid-row: 2 / -1;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: auto;
+  padding: 4px 0 0;
+  min-height: 0;
+  gap: 4px;
+}
+.is-phone .duel-controls p { margin: 0; font-size: 12px; line-height: 1.3; }
+.is-phone .duel-controls .duel-history { font-size: 10px; }
+.is-phone .duel-controls .recruitment-panel { width: 100%; margin: 0; padding-top: 4px; font-size: 12px; }
+.is-phone .recruitment-panel button { margin-top: 4px; }
+.is-phone .is-finished .duel-controls > button:last-child {
+  margin-top: auto;
+  align-self: flex-start;
+  max-width: calc(100% - 110px);
+}
+.is-phone .stadium-theater {
+  min-height: 0;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-rows: 32px minmax(0, 1fr) 32px;
+}
+.is-phone .stadium-theater .duel-arena { min-height: 0; }
+.is-phone .stadium-fan { flex-basis: 24px; width: 24px; height: 30px; }
+.is-phone .fan-avatar { width: 24px; height: 30px; }
+.is-phone .fan-flag { left: 14px; top: 3px; width: 10px; height: 8px; }
+.is-phone .fan-flag::after { height: 20px; }
+.is-phone .stadium-support-banner { padding: 0 3px; font-size: 8px; }
+.is-phone .duel-penalties { font-size: 10px; }
+
+.is-phone .stadium-panel { gap: 5px; }
+.is-phone .stadium-panel .coach-dialogue { padding: 6px; gap: 8px; }
+.is-phone .stadium-panel .coach-portrait { flex-basis: 48px; width: 48px; height: 60px; background-size: 48px 60px; }
+.is-phone .coach-lines strong { font-size: 12px; }
+.is-phone .coach-lines p { margin-top: 3px; font-size: 12px; }
+.is-phone .stadium-panel:has(.player-cards) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
+  gap: 5px 10px;
+}
+.is-phone .stadium-panel:has(.player-cards) h2 { grid-column: 1; grid-row: 1; align-self: center; }
+.is-phone .stadium-panel:has(.player-cards) .coach-dialogue { grid-column: 1; grid-row: 2 / 4; }
+.is-phone .stadium-panel .stadium-coach-next { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; margin: 0; padding: 6px 8px; font-size: 12px; }
+.is-phone .stadium-panel:has(.player-cards) .stadium-opponents { grid-column: 1; grid-row: 4; font-size: 10px; }
+.is-phone .stadium-panel:has(.player-cards) .stadium-series-status { grid-column: 1; grid-row: 5; }
+.is-phone .stadium-panel .stadium-next-opponent { grid-column: 2; grid-row: 2; }
+.is-phone .stadium-panel .selection-description { grid-column: 2; grid-row: 3; font-size: 11px; }
+.is-phone .stadium-panel .player-cards { grid-column: 2; grid-row: 4 / 6; overflow: auto; }
+.is-phone .stadium-panel .selection-status { grid-column: 1 / -1; grid-row: 6; }
+.is-phone .stadium-panel:has(.player-cards) .stadium-actions { grid-column: 1 / -1; grid-row: 7; }
+
+.is-phone .training-panel:has(.player-cards) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  gap: 5px 10px;
+}
+.is-phone .training-panel > :is(h2, p, .selection-actions) { grid-column: 1 / -1; }
+.is-phone .training-panel .player-cards { grid-column: 1; grid-row: 3; overflow: auto; }
+.is-phone .training-stage-holder { grid-column: 2; grid-row: 3; min-height: 0; }
+.is-phone .training-stage { height: 100%; min-height: 0; }
+.is-phone .training-panel .training-cooldown { font-size: 11px; }
+.is-phone .training-progress { font-size: 10px; padding: 3px 5px; }
+
+@media (max-height: 360px) {
+  .is-phone .stadium-panel:has(.player-cards) { gap: 3px 8px; }
+  .is-phone .stadium-panel .coach-lines p { font-size: 11px; }
+  .is-phone .stadium-panel .selection-description { font-size: 10px; }
+  .is-phone .stadium-panel .stadium-series-status { font-size: 11px; }
+  .is-phone .stadium-duel-panel { gap: 3px; }
+  .is-phone .stadium-duel-panel .duel-player { gap: 2px; }
+  .is-phone .stadium-theater { grid-template-rows: 24px minmax(64px, 1fr) 24px; }
+  .is-phone .stadium-theater .duelist { transform: translate(-50%, -50%) scale(.55); }
+  .is-phone .court-circle { width: 60px; height: 60px; }
+}

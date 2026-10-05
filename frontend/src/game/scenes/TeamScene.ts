@@ -8,7 +8,7 @@ import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 const archetypes = { DRIBBLER: 'Driblador', FINISHER: 'Finalizador', PLAYMAKER: 'Armador', MARKER: 'Marcador' }
 const roles = { DEFENDER: 'Defesa', MIDFIELDER: 'Meio-campo', ATTACKER: 'Ataque' }
 const stats: Record<keyof RosterPlayer['stats'], string> = {
-  speed: 'Velocidade', dribbling: 'Drible', passing: 'Passe', finishing: 'Finalização', defending: 'Defesa', physical: 'Físico',
+  speed: 'Velocidade', dribbling: 'Drible', finishing: 'Finalização', defending: 'Defesa', physical: 'Físico',
 }
 
 export class TeamScene extends Phaser.Scene {

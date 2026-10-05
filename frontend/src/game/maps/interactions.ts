@@ -20,7 +20,7 @@ export function canDetectChallenger(player: Position, target: Position): boolean
 // Static presentation only. No challenger availability or progress is inferred here.
 export const CHALLENGERS = [
   { playerDefinitionId: 'npc_nilo_01', name: 'Nilo', dialogue: 'Sou o Nilo! Se vencer, pode me convidar. Cora espera mais a leste; os rivais ficam mais fortes no caminho até o estádio.' },
-  { playerDefinitionId: 'npc_cora_01', name: 'Cora', dialogue: 'Meu forte é o passe. Davi treina a sudeste. O professor Dimas, do estádio, ensina a transformar uma roubada de bola em ataque.' },
+  { playerDefinitionId: 'npc_cora_01', name: 'Cora', dialogue: 'Meu forte é o drible. Davi treina a sudeste. O professor Dimas, do estádio, ensina a transformar uma roubada de bola em ataque.' },
   { playerDefinitionId: 'npc_davi_01', name: 'Davi', dialogue: 'Gosto de finalizar! Bia está mais adiante. Lá no estádio, Mara chuta forte no duelo individual.' },
   { playerDefinitionId: 'npc_bia_01', name: 'Bia', dialogue: 'Tenta acompanhar meu drible! Rui está depois da rua larga. Íris e Tito são bons de marcação. Você enfrenta cada um em um duelo no estádio.' },
   { playerDefinitionId: 'npc_rui_01', name: 'Rui', dialogue: 'Defesa também ganha jogo! Sol, Teca e Zeca esperam mais perto do estádio; treine seu atleta antes de encarar os cinco duelos de lá.' },

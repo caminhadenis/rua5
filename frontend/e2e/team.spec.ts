@@ -122,6 +122,7 @@ test('team shows every athlete and their attributes without loading or saving a 
   const lastPlayer = page.getByRole('radio', { name: 'Jogador 6, nível 1', exact: true })
   await lastPlayer.check()
   await expect(page.locator('.player-details')).toContainText('Jogador 6')
+  await expect(page.locator('.player-details dd')).toHaveCount(5)
   await expect(page.locator('.player-details dd').first()).toHaveText('41,25')
   await lastPlayer.press('ArrowLeft')
   await expect(page.locator('.player-details')).toContainText('Jogador 5')

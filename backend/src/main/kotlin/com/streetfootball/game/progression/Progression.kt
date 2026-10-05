@@ -68,7 +68,6 @@ object Progression {
         return MatchStats(
             grow(base.speed, bonuses.speed),
             grow(base.dribbling, bonuses.dribbling),
-            grow(base.passing, bonuses.passing),
             grow(base.finishing, bonuses.finishing),
             grow(base.defending, bonuses.defending),
             grow(base.physical, bonuses.physical),
@@ -79,13 +78,12 @@ object Progression {
 data class StatBonuses(
     val speed: Double = 0.0,
     val dribbling: Double = 0.0,
-    val passing: Double = 0.0,
     val finishing: Double = 0.0,
     val defending: Double = 0.0,
     val physical: Double = 0.0,
 ) {
     init {
-        require(listOf(speed, dribbling, passing, finishing, defending, physical).all { it in 0.0..98.0 })
+        require(listOf(speed, dribbling, finishing, defending, physical).all { it in 0.0..98.0 })
     }
 }
 

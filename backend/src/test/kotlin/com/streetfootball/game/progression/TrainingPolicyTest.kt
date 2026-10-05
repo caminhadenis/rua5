@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
 class TrainingPolicyTest {
     @Test
     fun `focused training improves only the selected stat and respects cap`() {
-        val base = MatchStats(50, 60, 70, 80, 90, 98)
+        val base = MatchStats(50, 60, 80, 90, 98)
         val improved = Progression.effectiveStats(base, 1, StatBonuses(dribbling = 0.25))
-        assertEquals(MatchStats(50.0, 60.25, 70.0, 80.0, 90.0, 98.0), improved)
+        assertEquals(MatchStats(50.0, 60.25, 80.0, 90.0, 98.0), improved)
         assertEquals(60.25, TrainingPolicy.stat(improved, TrainingFocus.DRIBBLING))
         assertTrue(TrainingPolicy.canImprove(98.75))
         assertFalse(TrainingPolicy.canImprove(99.0))

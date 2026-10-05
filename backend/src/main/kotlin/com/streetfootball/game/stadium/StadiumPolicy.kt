@@ -19,7 +19,7 @@ object StadiumPolicy {
         return players.sortedWith(
             compareBy<MatchParticipant> { it.level }
                 .thenBy {
-                    it.stats.run { speed + dribbling + passing + finishing + defending + physical }
+                    it.stats.run { speed + dribbling + finishing + defending + physical }
                 }.thenBy { it.playerDefinitionId },
         )
     }

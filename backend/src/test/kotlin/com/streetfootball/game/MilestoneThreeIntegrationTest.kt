@@ -127,7 +127,7 @@ class MilestoneThreeIntegrationTest {
             jdbc.queryForObject("SELECT level FROM owned_player", Int::class.java),
         )
         assertEquals(body.path("rewards").path("currentXp").asInt(), jdbc.queryForObject("SELECT xp FROM owned_player", Int::class.java))
-        assertEquals(20, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(21, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
     }
 
     @Test
@@ -417,7 +417,6 @@ class MilestoneThreeIntegrationTest {
                             MatchStats(
                                 row.getInt("speed"),
                                 row.getInt("dribbling"),
-                                row.getInt("passing"),
                                 row.getInt("finishing"),
                                 row.getInt("defending"),
                                 row.getInt("physical"),

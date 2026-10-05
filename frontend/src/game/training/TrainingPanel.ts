@@ -38,10 +38,11 @@ export async function openTrainingPanel(
       const title = document.createElement('h2')
       title.textContent = `Setor de ${label}`
       panel.append(title)
-      paragraph(panel, 'Cada treino dá +0,25 neste fundamento, até 99. Cada atleta tem seu próprio intervalo de 1 minuto.')
+      paragraph(panel, 'Cada treino dá +0,25 neste fundamento, até 99. Cada atleta tem seu próprio intervalo de 1 minuto.').className = 'selection-description'
       const cards = new PlayerCards(roster)
       panel.append(cards.element)
       const stageHolder = document.createElement('div')
+      stageHolder.className = 'training-stage-holder'
       panel.append(stageHolder)
       const focusedPlayer = () => roster.find(player => player.id === cards.selectedId)
       const renderProgress = () => {

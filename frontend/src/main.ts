@@ -9,6 +9,7 @@ import { StadiumScene } from './game/scenes/StadiumScene'
 import { TeamScene } from './game/scenes/TeamScene'
 import { InteriorScene } from './game/scenes/InteriorScene'
 import './style.css'
+import './mobile-panels.css'
 import { gameAudio } from './game/audio/GameAudio'
 import { installMobileViewport } from './game/input/mobileViewport'
 

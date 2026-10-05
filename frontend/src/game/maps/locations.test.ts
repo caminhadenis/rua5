@@ -21,9 +21,9 @@ describe('Benfica interior content', () => {
       }
     }
     expect(TRAINING_SECTORS.map(sector => sector.focus)).toEqual([
-      'SPEED', 'DRIBBLING', 'PASSING', 'FINISHING', 'DEFENDING', 'PHYSICAL',
+      'SPEED', 'DRIBBLING', 'FINISHING', 'DEFENDING', 'PHYSICAL',
     ])
-    expect(new Set(TRAINING_SECTORS.map(sector => `${sector.x},${sector.y}`)).size).toBe(6)
+    expect(new Set(TRAINING_SECTORS.map(sector => `${sector.x},${sector.y}`)).size).toBe(5)
     expect(TRAINING_SECTORS.every(sector => sector.coach && sector.dialogue)).toBe(true)
   })
 

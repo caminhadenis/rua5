@@ -88,7 +88,7 @@ export class StadiumScene extends Phaser.Scene {
       if (info.status !== 'COMPLETED') button(this.panel, 'Ouvir mais de Dimas', () => {
         speech = (speech + 1) % coachGreeting.length
         showSpeech(coachGreeting[speech])
-      })
+      }).className = 'stadium-coach-next'
       paragraph(this.panel, `Ordem dos duelos: ${info.opponentLineup.map(p => `${p.name} · Nv. ${p.level}`).join(' → ')}`).className = 'stadium-opponents'
       const message = {
         AVAILABLE: active
@@ -97,17 +97,20 @@ export class StadiumScene extends Phaser.Scene {
         LOCKED: 'Estádio bloqueado. Conquiste os troféus necessários para entrar.',
         COMPLETED: `Conquistado · ${info.trophy.name}. Este estádio está concluído.`,
       }[info.status]
-      paragraph(this.panel, message).setAttribute('role', 'status')
+      const seriesStatus = paragraph(this.panel, message)
+      seriesStatus.className = 'stadium-series-status'
+      seriesStatus.setAttribute('role', 'status')
       const actions = document.createElement('div')
       actions.className = 'stadium-actions'
       this.panel.append(actions)
       const back = button(actions, 'Voltar ao estádio', () => this.leave())
       if (info.status !== 'AVAILABLE') return
       paragraph(this.panel, `Dimas escolheu: ${opponent.name} · Nível ${opponent.level}`).className = 'stadium-next-opponent'
-      paragraph(this.panel, 'Escolha um atleta para este duelo. Pode usar o mesmo nos cinco jogos ou trocar entre eles.')
+      paragraph(this.panel, 'Escolha um atleta para este duelo. Pode usar o mesmo nos cinco jogos ou trocar entre eles.').className = 'selection-description'
       const cards = new PlayerCards(roster)
       this.panel.append(cards.element)
       const status = paragraph(this.panel, '')
+      status.className = 'selection-status'
       const start = button(actions, 'Iniciar duelo 1 × 1', () => {
         if (!cards.selectedId) return
         start.disabled = true

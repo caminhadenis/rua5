@@ -7,7 +7,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class StadiumDuelEngineTest {
-    private val stats = MatchStats(60, 60, 60, 60, 60, 60)
+    private val stats = MatchStats(60, 60, 60, 60, 60)
     private val request =
         MatchRequest(
             MatchMode.STADIUM_1V1,
@@ -28,7 +28,7 @@ class StadiumDuelEngineTest {
             assertNotEquals(MatchOutcome.DRAW, result.outcome)
             assertEquals(result.homeScore, result.events.count { it.type == MatchEventType.GOAL && it.side == MatchSide.HOME })
             assertEquals(result.awayScore, result.events.count { it.type == MatchEventType.GOAL && it.side == MatchSide.AWAY })
-            assertTrue(result.events.all { it.actorPlayerId in listOf("h", "a") && it.type != MatchEventType.PASS })
+            assertTrue(result.events.all { it.actorPlayerId in listOf("h", "a") })
             assertEquals((1..result.events.size).toList(), result.events.map { it.sequence })
             assertTrue(result.events.zipWithNext().all { (a, b) -> a.minute <= b.minute })
             result.penalties?.let {

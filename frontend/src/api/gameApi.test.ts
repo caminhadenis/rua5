@@ -19,6 +19,7 @@ describe('API boundary', () => {
     expect(() => parseDuel({ ...response, match: { ...response.match, events: [{ ...response.match.events[0]!, sequence: 2 }] } })).toThrow('Timeline')
   })
   it('reuses the key after network failure and issues a fresh key only for the next match', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
     const fetch = vi.fn().mockRejectedValueOnce(new TypeError('lost response'))
       .mockResolvedValue({ ok: true, json: async () => response })
     vi.stubGlobal('fetch', fetch)

@@ -1,3 +1,5 @@
+import { createIdempotencyKey } from './idempotencyKey'
+
 export interface Profile { id: string; starterSelected: boolean; primaryColor: string; secondaryColor: string }
 export interface Starter { id: string; name: string; archetype: string }
 export interface RosterPlayer {
@@ -5,13 +7,13 @@ export interface RosterPlayer {
   xpToNextLevel: number | null; wins: number; draws: number; losses: number
   archetype: 'DRIBBLER' | 'FINISHER' | 'PLAYMAKER' | 'MARKER'
   preferredRole: 'DEFENDER' | 'MIDFIELDER' | 'ATTACKER'
-  stats: Record<'speed' | 'dribbling' | 'passing' | 'finishing' | 'defending' | 'physical', number>
+  stats: Record<'speed' | 'dribbling' | 'finishing' | 'defending' | 'physical', number>
 }
 export interface ChallengeInfo {
   id: string; name: string; level: number; recruitable: boolean
   recruitmentStatus: 'LOCKED' | 'AVAILABLE' | 'RECRUITED'
 }
-export type EventType = 'POSSESSION' | 'DRIBBLE_SUCCESS' | 'TACKLE' | 'SHOT' | 'SHOT_MISSED' | 'GOAL' | 'PASS' | 'SAVE' | 'PENALTY_GOAL' | 'PENALTY_MISSED'
+export type EventType = 'POSSESSION' | 'DRIBBLE_SUCCESS' | 'TACKLE' | 'SHOT' | 'SHOT_MISSED' | 'GOAL' | 'SAVE' | 'PENALTY_GOAL' | 'PENALTY_MISSED'
 export interface MatchEvent {
   sequence: number; minute: number; type: EventType; side: 'HOME' | 'AWAY'; actorPlayerId: string
   homeScore: number; awayScore: number
@@ -56,7 +58,7 @@ export const teamApi = {
   recruit: (id: string) => request<{ challengerId: string; ownedPlayerId: string }>(`/challenges/${id}/recruit`, {}),
 }
 
-export type TrainingFocus = 'SPEED' | 'DRIBBLING' | 'PASSING' | 'FINISHING' | 'DEFENDING' | 'PHYSICAL'
+export type TrainingFocus = 'SPEED' | 'DRIBBLING' | 'FINISHING' | 'DEFENDING' | 'PHYSICAL'
 export interface TrainingResult {
   ownedPlayerId: string; focus: TrainingFocus; xpAwarded: number
   previousLevel: number; currentLevel: number; previousXp: number; currentXp: number
@@ -77,7 +79,7 @@ export const trainingApi = {
 export class TrainingCommand {
   private pending?: { ownedPlayerId: string; focus: TrainingFocus; key: string }
   async train(ownedPlayerId: string, focus: TrainingFocus): Promise<TrainingResult> {
-    if (!this.pending) this.pending = { ownedPlayerId, focus, key: crypto.randomUUID() }
+    if (!this.pending) this.pending = { ownedPlayerId, focus, key: createIdempotencyKey() }
     if (this.pending.ownedPlayerId !== ownedPlayerId || this.pending.focus !== focus) throw new Error('Recupere o treino pendente primeiro.')
     try {
       const result = await request<TrainingResult>('/training/sessions', { ownedPlayerId, focus }, this.pending.key)
@@ -90,7 +92,7 @@ export class TrainingCommand {
   }
 }
 
-const eventTypes: string[] = ['POSSESSION', 'DRIBBLE_SUCCESS', 'TACKLE', 'SHOT', 'SHOT_MISSED', 'GOAL', 'PASS', 'SAVE', 'PENALTY_GOAL', 'PENALTY_MISSED']
+const eventTypes: string[] = ['POSSESSION', 'DRIBBLE_SUCCESS', 'TACKLE', 'SHOT', 'SHOT_MISSED', 'GOAL', 'SAVE', 'PENALTY_GOAL', 'PENALTY_MISSED']
 export function parseDuel(value: DuelResponse): DuelResponse {
   const match = value?.match
   if (!match || !Array.isArray(match.events) || !match.events.length ||
@@ -119,7 +121,7 @@ export class DuelCommand {
   private pending?: { challengerId: string; ownedPlayerId: string; key: string }
 
   async play(challengerId: string, ownedPlayerId: string): Promise<DuelResponse> {
-    if (!this.pending) this.pending = { challengerId, ownedPlayerId, key: crypto.randomUUID() }
+    if (!this.pending) this.pending = { challengerId, ownedPlayerId, key: createIdempotencyKey() }
     const command = this.pending
     if (command.challengerId !== challengerId || command.ownedPlayerId !== ownedPlayerId) throw new Error('Repita o desafio pendente primeiro.')
     try {
@@ -188,7 +190,7 @@ export function parseStadium(value: StadiumResponse): StadiumResponse {
 export class StadiumCommand {
   private pending?: { id: string; ownedPlayerId: string; seriesId: string | null; roundNumber: number; key: string }
   async play(id: string, ownedPlayerId: string, seriesId: string | null, roundNumber: number): Promise<StadiumResponse> {
-    if (!this.pending) this.pending = { id, ownedPlayerId, seriesId, roundNumber, key: crypto.randomUUID() }
+    if (!this.pending) this.pending = { id, ownedPlayerId, seriesId, roundNumber, key: createIdempotencyKey() }
     const pending = this.pending
     if (pending.id !== id || pending.ownedPlayerId !== ownedPlayerId || pending.seriesId !== seriesId || pending.roundNumber !== roundNumber) throw new Error('Recupere a partida pendente primeiro.')
     try {

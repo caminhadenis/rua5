@@ -11,7 +11,7 @@ need a way to progress a chosen athlete without repeatedly challenging an NPC.
 ## Decision
 
 The Benfica map has one stable training point. A profile-owned player can complete a
-drill focused on one of the six existing stats. Each drill grants 8 XP toward the
+drill focused on one of the five existing stats. Each drill grants 8 XP toward the
 same level progression used by duels. Focus is recorded for history, while effective
 stats still grow uniformly with level. A 90-second cooldown applies per player.
 Training commands are serialized by the existing profile lock, persist a session

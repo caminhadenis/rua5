@@ -123,31 +123,34 @@ export function ownedPlayerEmotionUrl(id: string | undefined, colors: TeamColors
   return url
 }
 
-export async function applyStarterAppearance(scene: Phaser.Scene, id: string): Promise<string> {
-  const key = `team-${id}`
-  if (scene.textures.exists(key)) return key
+/** Upload fixed raster pixels rather than letting the mobile GPU size an SVG image. */
+async function addWalkingTexture(scene: Phaser.Scene, key: string, url: string): Promise<void> {
   const image = new Image()
-  image.src = starterUniformUrl(id)
+  image.src = url
   await image.decode()
-  const texture = scene.textures.addImage(key, image)
-  if (!texture) throw new Error('Unable to load starter appearance')
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 120
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Unable to rasterize walking animation')
+  context.imageSmoothingEnabled = false
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const texture = scene.textures.addCanvas(key, canvas)
+  if (!texture) throw new Error('Unable to load walking animation')
   for (const [row, direction] of ['front', 'side', 'back'].entries()) {
     for (let frame = 0; frame < 4; frame++) texture.add(`${direction}-${frame}`, 0, frame * 32, row * 40, 32, 40)
   }
+}
+
+export async function applyStarterAppearance(scene: Phaser.Scene, id: string): Promise<string> {
+  const key = `team-${id}`
+  if (scene.textures.exists(key)) return key
+  await addWalkingTexture(scene, key, starterUniformUrl(id))
   return key
 }
 
 export async function applyTeamColors(scene: Phaser.Scene, colors: TeamColors): Promise<void> {
   currentColors = colors
-  const source = new Image()
-  source.src = uniformUrl('player')
-  await source.decode()
   if (scene.textures.exists('team-player')) scene.textures.remove('team-player')
-  const texture = scene.textures.addImage('team-player', source)
-  if (!texture) throw new Error('Unable to load team uniform')
-  for (const [row, direction] of ['front', 'side', 'back'].entries()) {
-    for (let frame = 0; frame < 4; frame++) {
-      texture.add(`${direction}-${frame}`, 0, frame * 32, row * 40, 32, 40)
-    }
-  }
+  await addWalkingTexture(scene, 'team-player', uniformUrl('player'))
 }

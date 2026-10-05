@@ -20,7 +20,7 @@ export function choreographyFor(event: MatchEvent): DuelChoreography {
   const defender: DuelSide = actor === 'home' ? 'away' : 'home'
   const direction = actor === 'home' ? 1 : -1
   const lane = lanes[(event.sequence - 1) % lanes.length]!
-  const attackX = event.type === 'POSSESSION' || event.type === 'PASS' ? 34 :
+  const attackX = event.type === 'POSSESSION' ? 34 :
     event.type === 'DRIBBLE_SUCCESS' || event.type === 'TACKLE' ? 50 : 68
   const actorX = actor === 'home' ? attackX : 100 - attackX
   const defenderX = actorX + direction * 13

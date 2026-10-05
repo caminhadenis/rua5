@@ -378,9 +378,6 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .training-stage[data-focus="DRIBBLING"] .training-ball { left: 21%; }
 .training-stage[data-focus="DRIBBLING"] .training-cones { display: flex; justify-content: space-between; left: 28%; right: 12%; bottom: 29px; }
 .training-cones i { width: 20px; height: 28px; background: #eb8954; clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); border-bottom: 4px solid #fff4ce; }
-.training-stage[data-focus="PASSING"] .training-athlete { left: 75%; }
-.training-stage[data-focus="PASSING"] .training-partner { display: flex; }
-.training-stage[data-focus="PASSING"] .training-ball { left: 37%; }
 .training-stage[data-focus="FINISHING"] .training-athlete { left: 26%; }
 .training-stage[data-focus="FINISHING"] .training-ball { left: 32%; }
 .training-stage[data-focus="FINISHING"] .training-goal { display: block; right: 8%; bottom: 32px; width: 118px; height: 94px; border: 8px solid #f5ead2; border-bottom: 0; background: repeating-linear-gradient(0deg, transparent 0 15px, #b7c5bc88 15px 17px), repeating-linear-gradient(90deg, #1e393b88 0 15px, #b7c5bc88 15px 17px); }
@@ -397,8 +394,6 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 .training-stage.is-playing[data-focus="SPEED"] .training-athlete { animation: treadmill-run 250ms steps(2) infinite; }
 .training-stage.is-playing[data-focus="DRIBBLING"] .training-athlete { animation: cone-run 2500ms ease-in-out infinite; }
 .training-stage.is-playing[data-focus="DRIBBLING"] .training-ball { animation: cone-ball 2500ms ease-in-out infinite; }
-.training-stage.is-playing[data-focus="PASSING"] .training-ball { animation: passing-ball 1000ms ease-in-out infinite; }
-.training-stage.is-playing[data-focus="PASSING"] .training-athlete, .training-stage.is-playing[data-focus="PASSING"] .training-partner { animation: player-kick 1000ms ease-in-out infinite; }
 .training-stage.is-playing[data-focus="FINISHING"] .training-ball { animation: shooting-ball 1250ms ease-out infinite; }
 .training-stage.is-playing[data-focus="FINISHING"] .training-athlete { animation: player-kick 1250ms ease-in-out infinite; }
 .training-stage.is-playing[data-focus="FINISHING"] .training-goal span { display: block; animation: goal-flash 1250ms steps(1) infinite; }
@@ -411,7 +406,6 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
 @keyframes treadmill-run { 50% { translate: 0 -5px; } }
 @keyframes cone-run { 0%,100% { left: 20%; translate: 0 0; } 25% { left: 42%; translate: 0 -16px; } 50% { left: 60%; translate: 0 7px; } 75% { left: 79%; translate: 0 -13px; } }
 @keyframes cone-ball { 0%,100% { left: 21%; translate: 0 0; } 25% { left: 43%; translate: 0 -16px; } 50% { left: 61%; translate: 0 7px; } 75% { left: 80%; translate: 0 -13px; } }
-@keyframes passing-ball { 0%,100% { left: 36%; } 50% { left: 67%; } }
 @keyframes player-kick { 50% { translate: 0 -5px; } }
 @keyframes shooting-ball { 0% { left: 33%; bottom: 30px; opacity: 1; } 68% { left: 79%; bottom: 75px; opacity: 1; } 85%,100% { left: 79%; bottom: 75px; opacity: 0; } }
 @keyframes goal-flash { 0%,69%,100% { opacity: 0; } 70%,90% { opacity: 1; } }

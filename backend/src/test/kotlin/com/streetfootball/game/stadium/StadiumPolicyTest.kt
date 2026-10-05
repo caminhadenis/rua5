@@ -30,7 +30,7 @@ class StadiumPolicyTest {
             id: String,
             level: Int,
             stat: Int,
-        ) = MatchParticipant(id, id, id, level, MatchStats(stat, stat, stat, stat, stat, stat))
+        ) = MatchParticipant(id, id, id, level, MatchStats(stat, stat, stat, stat, stat))
         val players =
             listOf(
                 player("b", 6, 40),

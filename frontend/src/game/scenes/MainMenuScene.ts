@@ -58,7 +58,7 @@ export class MainMenuScene extends Phaser.Scene {
     grid.className = 'starter-grid'
     panel.append(grid)
     const descriptions: Record<string, string> = {
-      starter_leo: 'Boa velocidade e passe · cabelo marrom e bigode',
+      starter_leo: 'Boa velocidade e drible · cabelo marrom e bigode',
       starter_breno: 'Defensor forte na marcação · cabelo preto',
       starter_rafa: 'Boa finalização e velocidade · cabelo loiro',
     }

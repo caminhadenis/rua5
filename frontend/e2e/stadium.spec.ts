@@ -48,7 +48,7 @@ test('stadium entry is explorable and supporters oppose the visitor before coach
     game.scene.getScene('InteriorScene').player.setPosition(480, 435)
   })
   await talkToStadiumCoach(page)
-  await expect(page.getByText('Professor Dimas · treinador')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Estádio', exact: true }).getByText('Professor Dimas · treinador', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Ouvir mais de Dimas' }).click()
   await expect(page.getByText(/mais forte entra por último/)).toBeVisible()
   const receipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/matches'))

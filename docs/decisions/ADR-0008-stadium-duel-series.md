@@ -15,7 +15,7 @@ encerra a tentativa e exige reiniciar pelo primeiro rival.
 - Rua usa `DUEL_1V1` v1; novos jogos de estádio usam `STADIUM_1V1` v3, com um atleta por lado.
 - O estádio não exige lineup ou cinco recrutados. O usuário escolhe um atleta próprio a
   cada duelo e pode repetir ou trocar esse atleta entre jogos.
-- A força dos adversários é ordenada por nível, depois soma dos seis atributos efetivos;
+- A força dos adversários é ordenada por nível, depois soma dos cinco atributos efetivos;
   ID estável desempata. O mais forte enfrenta o visitante por último.
 - Cada tentativa salva os cinco snapshots ordenados. Mudanças de conteúdo não mudam uma
   sequência em andamento. Os comandos não aceitam adversário, seed, atributos ou placar.

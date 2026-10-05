@@ -44,7 +44,6 @@ class RosterService(
                     MatchStats(
                         definition.speed,
                         definition.dribbling,
-                        definition.passing,
                         definition.finishing,
                         definition.defending,
                         definition.physical,

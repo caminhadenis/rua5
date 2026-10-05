@@ -257,7 +257,7 @@ export class InteriorScene extends Phaser.Scene {
     for (const sector of TRAINING_SECTORS) {
       const { x, y, focus } = sector
       const color = focus === 'SPEED' || focus === 'DRIBBLING' ? 0x416b61
-        : focus === 'PASSING' || focus === 'FINISHING' ? 0x416478 : 0x685d76
+        : focus === 'FINISHING' ? 0x416478 : 0x685d76
       this.add.rectangle(x, y, 248, 126, color, 0.88).setStrokeStyle(3, 0xf0ba69)
       this.add.text(x, y - 48, sector.label, {
         fontFamily: 'monospace', fontSize: '16px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 5, y: 2 },
@@ -270,9 +270,6 @@ export class InteriorScene extends Phaser.Scene {
         equipment.lineBetween(x - 82, y + 30, x - 24, y + 30)
       } else if (focus === 'DRIBBLING') {
         for (const offset of [-74, -47, -20]) equipment.fillTriangle(x + offset, y + 39, x + offset + 8, y + 18, x + offset + 16, y + 39)
-      } else if (focus === 'PASSING') {
-        equipment.strokeCircle(x - 54, y + 30, 11)
-        equipment.lineBetween(x - 32, y + 30, x + 10, y + 30)
       } else if (focus === 'FINISHING') {
         equipment.strokeRect(x - 87, y + 13, 70, 34)
         equipment.strokeCircle(x - 2, y + 36, 7)

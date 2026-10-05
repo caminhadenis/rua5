@@ -44,7 +44,7 @@ O M3 já salva o resultado completo e serializa comandos por perfil. O M4 conect
   O último gol também aguarda sua comemoração antes do resultado; pular continua imediato.
   Ao fim, o outcome do backend seleciona vencedor feliz e perdedor cabisbaixo; empate deixa
   ambos neutros. Sprites SVG originais ampliam os placeholders existentes.
-- V6 reduz os stats de Nilo para speed 40, dribbling 40, passing 40, finishing 35,
+- V6 reduz os stats de Nilo para speed 40, dribbling 40, finishing 35,
   defending 45 e physical 40. A meta é aproximadamente 70%–80% de vitórias para starters
   no nível 1; Aderlou chega perto de 82% por sua defesa. O teste usa os seeds migrados e
   20 mil partidas por starter/nível (1 e 2), mantendo empates e derrotas possíveis.

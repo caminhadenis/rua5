@@ -12,11 +12,11 @@ histórico de duelos e o esquema de migrations. Não inclui expansão de NPCs do
 
 ## Decision
 
-- `VersionedMatchEngine` despacha `DUEL_1V1` v1 e `STADIUM_5V5` v2. A extração de
+- `VersionedMatchEngine` despacha `DUEL_1V1` v1 e `STADIUM_1V1` v3 (ADR-0010). A extração de
   chance limitada, alternância de lado e estatísticas preserva exatamente a sequência
   aleatória e o resultado dos duelos. Snapshots de participantes usam a mesma progressão.
-- O estádio tem 30 posses alternadas, construção ponderada por passe/drible, marcação
-  por defesa/físico, passe ou duelo e finalização ponderada por finalização/velocidade.
+- O estádio usava 30 posses alternadas e construção coletiva. Esse simulador foi
+  removido após a adoção exclusiva de duelos individuais (ADR-0010).
   Os eventos carregam jogadores reais e zonas abstratas de construção/ataque.
 - O goleiro não é um sexto participante. Força = base + média de (defesa + físico)/4,
   limitada a 1..99. A base do mandante é 35; a visitante é configurada por estádio e

@@ -301,7 +301,7 @@ class MilestoneSixIntegrationTest {
             )
         assertEquals(result.homeScore, receipt.path("match").path("homeScore").asInt())
         assertEquals(result.outcome.name, receipt.path("match").path("outcome").asString())
-        assertEquals(20, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(21, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
         assertFailsWith<DataIntegrityViolationException> {
             jdbc.update(
                 "INSERT INTO game_match SELECT gen_random_uuid(), profile_id, owned_player_id, mode, source_type, source_id, home_score, away_score, outcome, seed, engine_version, request_snapshot, events, statistics, gen_random_uuid(), created_at, rewards, stadium_id, home_penalties, away_penalties, series_id, expected_series_id, round_number FROM game_match",

@@ -23,6 +23,7 @@ test('compiled client → same-origin API/session → real duel → persisted re
   await expect(page.getByTestId('reward')).toContainText(`+${result.rewards!.xpAwarded} XP`)
   const roster = await (await page.request.get('/api/v1/roster')).json() as RosterPlayer[]
   expect(roster).toHaveLength(1)
+  expect(Object.keys(roster[0]!.stats).sort()).toEqual(['defending', 'dribbling', 'finishing', 'physical', 'speed'])
   expect(roster[0]!.xp).toBe(result.rewards!.currentXp)
   expect(roster[0]!.wins + roster[0]!.draws + roster[0]!.losses).toBe(1)
   await page.reload()

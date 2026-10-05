@@ -538,11 +538,14 @@ Stats iniciais do MVP:
 ```text
 speed
 dribbling
-passing
 finishing
 defending
 physical
 ```
+
+A V21 mantém somente esses cinco atributos no domínio, na API, no banco e no treino,
+adaptando snapshots existentes sem recalcular resultados ou recompensas. O simulador
+coletivo v2 foi removido; registros históricos continuam legíveis. Ver ADR-0010.
 
 Todos MUST permanecer dentro de intervalo válido, inicialmente:
 
@@ -674,7 +677,6 @@ Exemplo conceitual de DRIBBLER:
 ```text
 dribbling: 1.25
 speed:     1.10
-passing:   1.00
 finishing: 0.90
 defending: 0.75
 physical:  0.85
@@ -709,13 +711,13 @@ A fórmula final deve ser testável e centralizada.
 ## 11.5 Centro de treinamento
 
 O prédio `benfica.gym.entry` abriga o centro de treinamento do Benfica. O jogador entra
-no edifício, percorre seis setores e conversa com um único treinador em cada setor.
-Cada setor oferece um fundamento fixo (velocidade, drible, passe, finalização, marcação
+no edifício, percorre cinco setores e conversa com um único treinador em cada setor.
+Cada setor oferece um fundamento fixo (velocidade, drible, finalização, marcação
 ou físico); a mensagem do treinador pergunta se o jogador quer treinar e informa
 “Clique Enter para treinar”. Enter abre a tela de escolha de um atleta próprio. O diálogo
 fica em uma faixa compacta no alto da tela, fora da área do personagem.
 O frontend apresenta o atleta escolhido por cinco segundos na atividade correspondente:
-esteira, três cones, troca de passes, chutes a gol, perseguição ou musculação. Apenas um
+esteira, três cones, chutes a gol, perseguição ou musculação. Apenas um
 treino pode ocorrer por vez. Cada sessão concede +0,25 no atributo escolhido, sem XP,
 se o valor efetivo ainda for menor que 99. Quatro sessões somam +1; cada ganho fracionado
 já altera o atributo efetivo e o desempenho em partidas. Nível e XP não mudam.
@@ -935,7 +937,7 @@ Backend MUST validar tudo.
 ## 15.5 Sequência e troféu
 
 Cada treinador possui exatamente cinco jogadores. O backend ordena por nível e soma
-dos seis atributos efetivos, com ID estável para desempatar; o mais forte fica por último.
+dos cinco atributos efetivos, com ID estável para desempatar; o mais forte fica por último.
 O início da tentativa persiste esses snapshots para manter a ordem após reload.
 
 Cada partida é 1x1. Vitória avança para o próximo adversário. Uma derrota encerra
@@ -1011,7 +1013,7 @@ DUEL_1V1
 STADIUM_1V1
 ```
 
-Novos jogos sempre possuem um participante por lado. O modo histórico `STADIUM_5V5` v2 é preservado somente para ler e reproduzir snapshots antigos; nenhum endpoint cria partidas nesse modo.
+Novos jogos sempre possuem um participante por lado. O modo histórico `STADIUM_5V5` v2 é preservado somente para ler registros antigos; nenhum endpoint cria partidas nesse modo.
 
 ## 16.4 Primitivas
 
@@ -1019,7 +1021,6 @@ Exemplos:
 
 ```text
 possession
-pass
 dribble
 tackle
 shot
@@ -1098,7 +1099,7 @@ separados de `GOAL` e não mudam o placar regulamentar.
 
 ## 16.8 Compatibilidade histórica
 
-O engine 5x5 v2 e suas regras antigas permanecem apenas para resultados históricos.
+O modo 5x5 v2 permanece apenas nos registros históricos; seu simulador foi removido.
 
 ## 16.9 Empate
 
@@ -1314,7 +1315,6 @@ rarity
 
 speed
 dribbling
-passing
 finishing
 defending
 physical
@@ -1825,6 +1825,11 @@ contexto: conversar, entrar, continuar, desafiar ou treinar; há também fechar/
 e acesso à equipe no bairro. Nos interiores, sair está disponível por toque.
 Os controles ocupam faixas laterais fora do canvas; menus e partidas usam a área
 completa e seus botões existentes. Diálogos usam texto DOM legível no celular.
+Seleções de atletas, treino e estádio usam cartões compactos no celular. O duelo
+adapta quadra e placar à altura disponível; no resultado, recompensas e ações ficam
+ao lado da quadra. Ações principais permanecem visíveis, sem rolar o painel nas
+telas horizontais comuns. Elencos extensos podem rolar somente a lista de atletas;
+conteúdo excepcional mantém rolagem acessível. O layout do PC é preservado.
 Os alvos de toque têm pelo menos 44×44 CSS pixels, respeitam áreas seguras e aceitam
 dedos independentes. Soltar/cancelar o toque, perder foco, girar o aparelho ou trocar
 de scene limpa o movimento; abrir diálogo ou seleção bloqueia a locomoção.
@@ -2031,7 +2036,6 @@ Eles são placeholders e podem ser substituídos.
 ```text
 speed      74
 dribbling  70
-passing    77
 finishing  58
 defending  48
 physical   52
@@ -2044,7 +2048,6 @@ Visual: cabelo marrom e bigode.
 ```text
 speed      72
 dribbling  61
-passing    55
 finishing  81
 defending  39
 physical   62
@@ -2057,7 +2060,6 @@ Visual: cabelo loiro.
 ```text
 speed      58
 dribbling  62
-passing    62
 finishing  55
 defending  78
 physical   66
@@ -2080,7 +2082,6 @@ Estádio: média equivalente a level 6–8
 ```
 
 O primeiro NPC, Nilo, permanece no nível 1 com stats speed 40, dribbling 40,
-passing 40, finishing 35, defending 45 e physical 40. O alvo para o primeiro duelo
 é aproximadamente 70%–80% de vitórias com qualquer starter no nível 1 (Aderlou, por
 sua defesa, fica perto de 82%), sem garantia de vitória.
 
@@ -2899,7 +2900,7 @@ Exemplo:
 ```text
 Bairro A: drible e velocidade
 Bairro B: físico e marcação
-Bairro C: passe e posse
+Bairro C: marcação e físico
 ```
 
 Isso cria identidade regional.

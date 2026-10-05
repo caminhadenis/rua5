@@ -326,7 +326,7 @@ export class WorldScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, restoreCapture)
     const challenger = this.activeChallenger
     const panel = scenePanel(this, `Desafiar ${challenger.name}`)
-    panel.classList.add('player-selection-panel')
+    panel.classList.add('player-selection-panel', 'duel-selection-panel')
     const close = () => {
       panel.dispose()
       restoreCapture()
@@ -352,6 +352,7 @@ export class WorldScene extends Phaser.Scene {
         panel.append(cards.element)
         paragraph(panel, 'Revanches e adversários de nível inferior rendem menos XP.').className = 'selection-hint'
         const status = paragraph(panel, '')
+        status.className = 'selection-status'
         const actions = document.createElement('div')
         actions.className = 'selection-actions'
         panel.append(actions)

@@ -6,7 +6,6 @@ export const TRAINING_DURATION_MS = 5_000
 const descriptions: Record<TrainingFocus, string> = {
   SPEED: 'correndo na esteira',
   DRIBBLING: 'driblando três cones',
-  PASSING: 'trocando passes com um parceiro',
   FINISHING: 'chutando para o gol vazio',
   DEFENDING: 'acompanhando um adversário que muda de direção',
   PHYSICAL: 'levantando pesos',

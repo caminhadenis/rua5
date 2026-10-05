@@ -37,7 +37,7 @@ export class Playback {
 export function presentEvent(event: MatchEvent, participants: Participant[]): string {
   const actor = participants.find(player => player.playerId === event.actorPlayerId)?.name ?? 'Jogador'
   const text = {
-    PASS: 'completou o passe!', SAVE: 'teve o chute defendido pelo goleiro!',
+    SAVE: 'teve o chute defendido pelo goleiro!',
     PENALTY_GOAL: 'converteu o pênalti!', PENALTY_MISSED: 'perdeu o pênalti!',
     POSSESSION: 'ficou com a bola.', DRIBBLE_SUCCESS: 'passou pelo marcador!',
     TACKLE: 'roubou a bola!', SHOT: 'chutou…', SHOT_MISSED: 'chutou para fora!', GOAL: 'marcou um GOL!',

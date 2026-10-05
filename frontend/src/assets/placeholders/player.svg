@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="120" viewBox="0 0 128 120" shape-rendering="crispEdges">
-  <!-- Original 32 x 40 frames. Columns: passing, left contact, passing, right contact.
+  <!-- Original 32 x 40 frames. Columns: stride, left contact, stride, right contact.
        Rows: front, right profile (mirrored for left), back. Shadow and collision anchor stay fixed. -->
   <defs>
     <g id="front-body">

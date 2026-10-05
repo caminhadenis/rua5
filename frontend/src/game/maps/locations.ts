@@ -97,7 +97,7 @@ export const INTERIORS: InteriorLocation[] = [
   },
   {
     key: 'benfica.gym.entry', name: 'Centro de Treinamento do Benfica', kind: 'gym',
-    floorColor: 0x8db1a5, wallColor: 0x456a66, accentColor: 0xf0ba69, pattern: 'mat', wallLabel: 'SEIS SETORES DE TREINO',
+    floorColor: 0x8db1a5, wallColor: 0x456a66, accentColor: 0xf0ba69, pattern: 'mat', wallLabel: 'CINCO SETORES DE TREINO',
     furniture: [],
     people: [
       { name: 'Treinadora Jo', role: 'trainer', sprite: 'resident-sport', x: 595, y: 441, dialogue: 'Bem-vindo! Cada treino dá +0,25 no fundamento escolhido, até 99. Treinar melhora a habilidade; o nível sobe com XP de partidas.' },

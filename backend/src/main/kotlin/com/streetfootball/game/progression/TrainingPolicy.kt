@@ -4,7 +4,7 @@ import com.streetfootball.game.match.domain.MatchStats
 import java.time.Duration
 import java.time.Instant
 
-enum class TrainingFocus { SPEED, DRIBBLING, PASSING, FINISHING, DEFENDING, PHYSICAL }
+enum class TrainingFocus { SPEED, DRIBBLING, FINISHING, DEFENDING, PHYSICAL }
 
 /** Each drill grants a quarter stat point; each athlete has an independent cooldown. */
 object TrainingPolicy {
@@ -25,7 +25,6 @@ object TrainingPolicy {
         when (focus) {
             TrainingFocus.SPEED -> stats.speed
             TrainingFocus.DRIBBLING -> stats.dribbling
-            TrainingFocus.PASSING -> stats.passing
             TrainingFocus.FINISHING -> stats.finishing
             TrainingFocus.DEFENDING -> stats.defending
             TrainingFocus.PHYSICAL -> stats.physical

@@ -16,7 +16,7 @@ internal fun PlayerDefinitionEntity.snapshot(
     name,
     level,
     Progression.effectiveStats(
-        MatchStats(speed, dribbling, passing, finishing, defending, physical),
+        MatchStats(speed, dribbling, finishing, defending, physical),
         level,
         owned?.trainingBonuses() ?: com.streetfootball.game.progression
             .StatBonuses(),

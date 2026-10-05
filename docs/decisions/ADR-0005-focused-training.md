@@ -8,7 +8,7 @@ A regra atual está na [ADR-0009](ADR-0009-quarter-point-training.md): +0,25 por
 
 O treino do Benfica passa a melhorar em +1 o atributo efetivo escolhido, sem conceder XP.
 O bônus pertence ao `owned_player`, é somado ao stat base e ao crescimento por nível e
-é limitado a 99. Os seis bônus são colunas com constraints em V13. Partidas futuras
+é limitado a 99. Os cinco bônus são colunas com constraints em V13. Partidas futuras
 registram snapshots com esses valores; partidas já persistidas não são alteradas.
 
 Uma sessão continua transacional e idempotente. O lock do perfil serializa comandos;

@@ -248,7 +248,7 @@ class MilestoneFiveIntegrationTest {
                 ),
             )
             assertEquals(
-                20,
+                21,
                 upgrade.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success AND type = 'SQL'", Int::class.java),
             )
         }
@@ -385,7 +385,7 @@ class MilestoneFiveIntegrationTest {
         for (index in 1..4) {
             val definition = "fixture_$index"
             jdbc.update(
-                "INSERT INTO player_definition SELECT ?, ?, archetype, preferred_role, rarity, speed, dribbling, passing, finishing, defending, physical, TRUE, FALSE, TRUE FROM player_definition WHERE id = 'npc_nilo_01' ON CONFLICT DO NOTHING",
+                "INSERT INTO player_definition SELECT ?, ?, archetype, preferred_role, rarity, speed, dribbling, finishing, defending, physical, TRUE, FALSE, TRUE FROM player_definition WHERE id = 'npc_nilo_01' ON CONFLICT DO NOTHING",
                 definition,
                 "Fixture $index",
             )

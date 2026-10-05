@@ -38,6 +38,159 @@ class MilestoneSevenIntegrationTest {
     @Autowired private lateinit var definitions: PlayerDefinitionRepository
 
     @Test
+    fun `five attribute migration upgrades legacy saves without changing results or stadium order`() {
+        val schema = "attribute_upgrade_${UUID.randomUUID().toString().replace("-", "")}"
+
+        fun flyway(target: String? = null): Flyway {
+            val config =
+                Flyway
+                    .configure()
+                    .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+                    .schemas(schema)
+                    .defaultSchema(schema)
+            if (target != null) config.target(target)
+            return config.load()
+        }
+        flyway("20").migrate()
+        postgres.createConnection("").use { connection ->
+            connection.schema = schema
+            val upgrade = JdbcTemplate(SingleConnectionDataSource(connection, true))
+            val profileId = UUID.randomUUID()
+            val playerId = UUID.randomUUID()
+            val matchId = UUID.randomUUID()
+            val key = UUID.randomUUID()
+            val seriesId = UUID.randomUUID()
+            upgrade.update(
+                "INSERT INTO game_profile (id, display_name, created_at, updated_at) VALUES (?, 'Upgrade', now(), now())",
+                profileId,
+            )
+            upgrade.update(
+                """INSERT INTO owned_player (id, profile_id, player_definition_id, level, xp, recruited_at,
+                   training_dribbling, training_passing) VALUES (?, ?, 'starter_leo', 3, 42, now(), 7, 12)""",
+                playerId,
+                profileId,
+            )
+            for (focus in listOf("PASSING", "DRIBBLING")) {
+                upgrade.update(
+                    """INSERT INTO training_session (profile_id, idempotency_key, owned_player_id, focus, xp_awarded,
+                       previous_level, current_level, previous_xp, current_xp, trained_at)
+                       VALUES (?, ?, ?, ?, 8, 3, 3, 34, 42, now())""",
+                    profileId,
+                    UUID.randomUUID(),
+                    playerId,
+                    focus,
+                )
+                upgrade.update(
+                    "INSERT INTO owned_player_training_progress VALUES (?, ?, 2)",
+                    playerId,
+                    focus,
+                )
+            }
+
+            fun participants(prefix: String) =
+                (1..5).map { index ->
+                    mapOf(
+                        "playerId" to "$prefix$index",
+                        "playerDefinitionId" to "$prefix$index",
+                        "name" to "$prefix$index",
+                        "level" to 3,
+                        "stats" to
+                            mapOf(
+                                "speed" to 50,
+                                "dribbling" to 51.75,
+                                "passing" to 53,
+                                "finishing" to 50,
+                                "defending" to 50,
+                                "physical" to 50,
+                            ),
+                    )
+                }
+            val home = participants("home")
+            val away = participants("away")
+            val snapshot =
+                json.writeValueAsString(
+                    mapOf("mode" to "STADIUM_5V5", "home" to home, "away" to away, "seed" to 42, "engineVersion" to "2"),
+                )
+            val events =
+                json.writeValueAsString(
+                    listOf("POSSESSION", "PASS", "SHOT", "GOAL").mapIndexed { index, type ->
+                        mapOf("sequence" to index + 1, "minute" to 1, "type" to type, "side" to "HOME", "actorPlayerId" to "home1")
+                    },
+                )
+            val statistics = """{"home":{"possessions":1,"successfulDribbles":0,"tackles":0,"shots":1,"goals":1},
+                "away":{"possessions":0,"successfulDribbles":0,"tackles":0,"shots":0,"goals":0}}"""
+            upgrade.update(
+                """INSERT INTO game_match (id, profile_id, mode, source_type, stadium_id, home_score, away_score,
+                   outcome, seed, engine_version, request_snapshot, events, statistics, idempotency_key, created_at)
+                   VALUES (?, ?, 'STADIUM_5V5', 'STADIUM', 'benfica_stadium', 1, 0, 'WIN', 42, '2',
+                   ?::jsonb, ?::jsonb, ?::jsonb, ?, now())""",
+                matchId,
+                profileId,
+                snapshot,
+                events,
+                statistics,
+                key,
+            )
+            upgrade.update(
+                "INSERT INTO user_trophy (profile_id, trophy_id, stadium_id, match_id, won_at) VALUES (?, 'trophy_benfica', 'benfica_stadium', ?, now())",
+                profileId,
+                matchId,
+            )
+            upgrade.update(
+                "INSERT INTO stadium_series (id, profile_id, stadium_id, opponents, played, wins, created_at) VALUES (?, ?, 'benfica_stadium', ?::jsonb, 2, 2, now())",
+                seriesId,
+                profileId,
+                json.writeValueAsString(away),
+            )
+            flyway().migrate()
+            assertEquals(
+                0,
+                upgrade.queryForObject(
+                    "SELECT count(*) FROM information_schema.columns WHERE table_schema = ? AND column_name IN ('passing', 'training_passing')",
+                    Int::class.java,
+                    schema,
+                ),
+            )
+            assertEquals(7, upgrade.queryForObject("SELECT training_dribbling FROM owned_player WHERE id = ?", Int::class.java, playerId))
+            assertEquals(42, upgrade.queryForObject("SELECT xp FROM owned_player WHERE id = ?", Int::class.java, playerId))
+            assertEquals(3, upgrade.queryForObject("SELECT level FROM owned_player WHERE id = ?", Int::class.java, playerId))
+            assertEquals(listOf("DRIBBLING"), upgrade.queryForList("SELECT focus FROM training_session", String::class.java))
+            assertEquals(listOf("DRIBBLING"), upgrade.queryForList("SELECT focus FROM owned_player_training_progress", String::class.java))
+            val stored =
+                requireNotNull(
+                    com.streetfootball.game.match
+                        .MatchRepository(upgrade, json)
+                        .findByKey(profileId, key),
+                )
+            assertEquals(1, stored.result.homeScore)
+            assertEquals(0, stored.result.awayScore)
+            assertEquals("2", stored.result.engineVersion)
+            assertEquals(MatchOutcome.WIN, stored.result.outcome)
+            assertEquals(listOf("POSSESSION", "SHOT", "GOAL"), stored.result.events.map { it.type.name })
+            assertEquals(listOf(1, 2, 3), stored.result.events.map { it.sequence })
+            assertEquals(
+                51.75,
+                stored.request.home
+                    .first()
+                    .stats.dribbling,
+            )
+            assertEquals(json.readTree(statistics), json.readTree(json.writeValueAsString(stored.result.statistics)))
+            assertEquals(1, upgrade.queryForObject("SELECT count(*) FROM user_trophy WHERE match_id = ?", Int::class.java, matchId))
+            val series =
+                requireNotNull(
+                    com.streetfootball.game.stadium
+                        .StadiumSeriesRepository(upgrade, json)
+                        .latest(profileId, "benfica_stadium"),
+                )
+            assertEquals(seriesId, series.id)
+            assertEquals(2, series.played)
+            assertEquals(2, series.wins)
+            assertEquals((1..5).map { "away$it" }, series.opponents.map { it.playerId })
+            kotlin.test.assertFailsWith<IllegalArgumentException> { VersionedMatchEngine().simulate(stored.request) }
+        }
+    }
+
+    @Test
     fun `quarter point migration preserves earned bonuses and historical receipts`() {
         val schema = "training_upgrade_${UUID.randomUUID().toString().replace("-", "")}"
 
@@ -180,6 +333,8 @@ class MilestoneSevenIntegrationTest {
         val payload = mapOf("ownedPlayerId" to playerId, "focus" to "DRIBBLING")
         val key = UUID.randomUUID()
         val before = body(send(client, "GET", "/roster"))[0]
+        assertEquals(5, before["stats"].size())
+        assertEquals(400, send(client, "POST", path, payload + ("focus" to "PASSING"), UUID.randomUUID()).statusCode())
         // A partial group from an old save must not delay or multiply the new quarter-point gain.
         jdbc.update(
             "INSERT INTO owned_player_training_progress (owned_player_id, focus, sessions_completed) VALUES (?, 'DRIBBLING', 3)",
@@ -196,7 +351,7 @@ class MilestoneSevenIntegrationTest {
         assertEquals(before["xp"], after["xp"])
         assertEquals(before["level"], after["level"])
         assertEquals(first["statAfter"], after["stats"]["dribbling"])
-        assertEquals(before["stats"]["passing"], after["stats"]["passing"])
+        assertEquals(before["stats"]["finishing"], after["stats"]["finishing"])
         val status = body(send(client, "GET", "/training/status"))
         assertEquals(playerId, status["cooldowns"][0]["ownedPlayerId"].asString())
         assertEquals(first["nextAvailableAt"], status["cooldowns"][0]["nextAvailableAt"])
@@ -233,7 +388,7 @@ class MilestoneSevenIntegrationTest {
         assertEquals(0, secondAthlete["progressAfter"].asInt())
         assertEquals(secondAthlete["statBefore"].asDouble() + 0.25, secondAthlete["statAfter"].asDouble())
         assertEquals(2, body(send(client, "GET", "/training/status"))["cooldowns"].size())
-        assertEquals(409, send(client, "POST", path, payload + ("focus" to "PASSING"), key).statusCode())
+        assertEquals(409, send(client, "POST", path, payload + ("focus" to "FINISHING"), key).statusCode())
         val other = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         body(send(other, "POST", "/profiles", mapOf("displayName" to "Outro")))
         body(send(other, "POST", "/profile/starter", mapOf("playerDefinitionId" to "starter_rafa")))
@@ -267,7 +422,7 @@ class MilestoneSevenIntegrationTest {
             "UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?",
             UUID.fromString(playerId),
         )
-        val otherFocus = body(send(client, "POST", path, payload + ("focus" to "PASSING"), UUID.randomUUID()))
+        val otherFocus = body(send(client, "POST", path, payload + ("focus" to "FINISHING"), UUID.randomUUID()))
         assertEquals(0, otherFocus["progressBefore"].asInt())
         assertEquals(0, otherFocus["progressAfter"].asInt())
         assertEquals(otherFocus["statBefore"].asDouble() + 0.25, otherFocus["statAfter"].asDouble())

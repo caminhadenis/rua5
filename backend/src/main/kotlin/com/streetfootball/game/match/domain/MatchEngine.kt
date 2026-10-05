@@ -10,21 +10,20 @@ enum class MatchSide { HOME, AWAY }
 
 enum class MatchOutcome { WIN, DRAW, LOSS }
 
-enum class MatchEventType { POSSESSION, DRIBBLE_SUCCESS, TACKLE, SHOT, SHOT_MISSED, GOAL, PASS, SAVE, PENALTY_GOAL, PENALTY_MISSED }
+enum class MatchEventType { POSSESSION, DRIBBLE_SUCCESS, TACKLE, SHOT, SHOT_MISSED, GOAL, SAVE, PENALTY_GOAL, PENALTY_MISSED }
 
 data class MatchStats(
     val speed: Double,
     val dribbling: Double,
-    val passing: Double,
     val finishing: Double,
     val defending: Double,
     val physical: Double,
 ) {
-    constructor(speed: Int, dribbling: Int, passing: Int, finishing: Int, defending: Int, physical: Int) :
-        this(speed.toDouble(), dribbling.toDouble(), passing.toDouble(), finishing.toDouble(), defending.toDouble(), physical.toDouble())
+    constructor(speed: Int, dribbling: Int, finishing: Int, defending: Int, physical: Int) :
+        this(speed.toDouble(), dribbling.toDouble(), finishing.toDouble(), defending.toDouble(), physical.toDouble())
 
     init {
-        require(listOf(speed, dribbling, passing, finishing, defending, physical).all { it in 1.0..99.0 }) {
+        require(listOf(speed, dribbling, finishing, defending, physical).all { it in 1.0..99.0 }) {
             "All stats must be within 1..99."
         }
     }

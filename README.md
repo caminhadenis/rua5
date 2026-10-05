@@ -33,7 +33,8 @@ Node ou Gradle no host para jogar dessa forma. O primeiro build baixa as depend�
 
 O frontend encaminha `/api` ao serviço `backend`, preservando a sessão no mesmo domínio.
 O backend acessa `postgres:5432` pela rede interna. O volume `postgres-data` existente
-é preservado. As portas publicadas são locais (`127.0.0.1`).
+é preservado. Por padrão, as portas publicadas são locais (`127.0.0.1`);
+`FRONTEND_HOST` permite liberar o frontend para a rede Wi-Fi.
 
 ```bash
 docker compose ps
@@ -94,8 +95,20 @@ Fechar/Sair e Equipe. Menus, seleção de atletas e partidas são operados por t
 Tela cheia é opcional nos navegadores que a oferecem. No PC continuam os controles
 por teclado e o layout habitual, mesmo com a janela estreita.
 
-Para testar em um celular na mesma rede Wi-Fi, mantenha o backend local ativo e rode
-o frontend de desenvolvimento com acesso pela rede:
+Para acessar o jogo do Compose em um celular na mesma rede Wi-Fi, adicione
+`FRONTEND_HOST=0.0.0.0` ao arquivo `.env` na raiz e aplique a configuração:
+
+```bash
+docker compose up -d --no-deps --wait frontend
+```
+
+No celular, abra `http://<IP-local-do-computador>:5173`. O Nginx encaminha a API
+ao backend pela rede interna do Docker. Backend e PostgreSQL continuam com suas
+portas limitadas ao computador. Para voltar ao acesso somente local, remova a
+variável do `.env` e execute o mesmo comando.
+
+Para testar com recarga automática durante o desenvolvimento, mantenha o backend
+local ativo e rode o frontend com acesso pela rede:
 
 ```bash
 cd frontend
@@ -103,8 +116,7 @@ npm run dev -- --host 0.0.0.0
 ```
 
 No celular, abra `http://<IP-local-do-computador>:5173` (ou a porta informada pelo
-Vite). O proxy do Vite encaminha a API ao backend local. As portas do Compose
-continuam limitadas a `127.0.0.1`; esse acesso pela rede usa o servidor do Vite.
+Vite). O proxy do Vite encaminha a API ao backend local.
 Se a porta 5173 já estiver ocupada pelo Compose, especifique `--port 5175`.
 
 Validação dos controles contra o backend ativo:
@@ -244,7 +256,7 @@ O personagem colide com construções, cercas vivas e o NPC. A câmera acompanha
 e respeita os limites do bairro. O diálogo e a seleção pausam o movimento.
 
 Entre no **Centro de Treinamento do Benfica** pela porta do prédio marcado no mapa.
-Lá dentro há seis setores com atletas treinando. Aproxime-se do treinador do setor
+Lá dentro há cinco setores com atletas treinando. Aproxime-se do treinador do setor
 desejado, pressione **E** para conversar e **Enter** para escolher um atleta. Clique em
 **Começar treino**. A atividade do atleta escolhido dura 5 segundos. Cada treino
 concede +0,25 no fundamento escolhido, até 99; quatro sessões somam +1. A melhora
@@ -258,7 +270,7 @@ abrir a escolha do atleta.
 
 `POST /api/v1/training/sessions` recebe `Idempotency-Key: <uuid>` e JSON
 `{"ownedPlayerId":"<uuid>","focus":"DRIBBLING"}`. Os focos aceitos são
-`SPEED`, `DRIBBLING`, `PASSING`, `FINISHING`, `DEFENDING` e `PHYSICAL`.
+`SPEED`, `DRIBBLING`, `FINISHING`, `DEFENDING` e `PHYSICAL`.
 `GET /api/v1/training/status` retorna `cooldowns` por `ownedPlayerId`; os campos de
 progresso são mantidos para compatibilidade, com zero após novas sessões. A resposta
 do comando contém atributo anterior/atual (agora aceitando quartos de ponto) e
@@ -296,6 +308,7 @@ O Compose possui valores padrão destinados somente ao desenvolvimento local:
 | `POSTGRES_PORT` | `55432` |
 | `BACKEND_PORT` | `8080` |
 | `FRONTEND_PORT` | `5173` |
+| `FRONTEND_HOST` | `127.0.0.1` |
 
 As portas podem ser sobrescritas no ambiente ou em `.env`. No Compose, a conexão com o
 banco usa os valores `POSTGRES_*` acima. Na execução manual, o backend aceita estas variáveis:
@@ -441,8 +454,7 @@ API da sessão:
 - Comando de tela antiga recebe STADIUM_SEQUENCE_CHANGED; mesma chave recupera o
   resultado original sem duplicar XP/avanço. Nova chave após conquista é rejeitada.
 
-A migration V19 preserva partidas e troféus antigos. O engine 5x5 fica disponível
-somente para reprodução histórica. Veja [ADR-0008](docs/decisions/ADR-0008-stadium-duel-series.md).
+A migration V19 preserva partidas e troféus antigos. Resultados 5x5 existentes são preservados; o simulador coletivo foi removido. Veja [ADR-0008](docs/decisions/ADR-0008-stadium-duel-series.md).
 
 Versão local: [http://localhost:5173](http://localhost:5173). Para atualizar mantendo o banco:
 
@@ -534,3 +546,10 @@ Para executar E2E enquanto outra instância ocupa 8080, defina `E2E_BACKEND_PORT
 (por exemplo, 18080) e `DB_URL` apontando para um PostgreSQL de teste. O Playwright
 inicia backend e Vite com o proxy correspondente, sem interromper a outra instância.
 Se já existir um backend local em 8080, `E2E_REUSE_BACKEND=1` reutiliza essa instância.
+
+### Atributos dos duelos
+
+Os atletas possuem cinco atributos: velocidade, drible, finalização, marcação e físico.
+A academia oferece cinco setores. A V21 adapta os saves e os snapshots sem recalcular
+placares ou recompensas, preservando os bônus dos atributos mantidos. O simulador
+coletivo foi removido; registros antigos continuam legíveis. Ver [ADR-0010](docs/decisions/ADR-0010-five-duel-attributes.md).

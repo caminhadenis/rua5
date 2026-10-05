@@ -37,10 +37,10 @@ class ProgressionTest {
 
     @Test
     fun `growth preserves bases level one and valid stat bounds`() {
-        val base = MatchStats(1, 99, 50, 98, 10, 20)
+        val base = MatchStats(1, 99, 98, 10, 20)
         assertEquals(base, Progression.effectiveStats(base, 1))
-        assertEquals(MatchStats(15, 99, 64, 99, 24, 34), Progression.effectiveStats(base, 15))
-        assertEquals(MatchStats(2, 99, 51, 99, 11, 21), Progression.effectiveStats(base, 2))
+        assertEquals(MatchStats(15, 99, 99, 24, 34), Progression.effectiveStats(base, 15))
+        assertEquals(MatchStats(2, 99, 99, 11, 21), Progression.effectiveStats(base, 2))
         for (level in 2..15) {
             assertTrue(Progression.effectiveStats(base, level).speed > Progression.effectiveStats(base, level - 1).speed)
         }

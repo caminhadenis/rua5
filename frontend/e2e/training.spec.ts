@@ -38,7 +38,7 @@ test('enter the training center, choose a sector and complete one five second dr
     await page.keyboard.press('Enter', { delay: 80 })
   }
   for (const [focus, prop] of [
-    ['SPEED', '.training-treadmill'], ['DRIBBLING', '.training-cones'], ['PASSING', '.training-partner'],
+    ['SPEED', '.training-treadmill'], ['DRIBBLING', '.training-cones'],
     ['FINISHING', '.training-goal'], ['DEFENDING', '.training-partner'], ['PHYSICAL', '.training-weights'],
   ] as const) {
     await openSector(focus)
@@ -49,7 +49,12 @@ test('enter the training center, choose a sector and complete one five second dr
     await expect(stage).toHaveAttribute('aria-label', /Cabeleira/)
     await panel.getByRole('button', { name: 'Voltar ao centro' }).click()
   }
+  expect(await page.evaluate(async () => {
+    const { game } = await import('/src/main.ts')
+    return game.scene.getScene('InteriorScene').people.filter((person: { focus?: string }) => person.focus).length
+  })).toBe(5)
   const before = (await (await page.request.get('/api/v1/roster')).json())[0]
+  expect(Object.keys(before.stats).sort()).toEqual(['defending', 'dribbling', 'finishing', 'physical', 'speed'])
   await openSector('DRIBBLING')
   const panel = page.locator('.training-panel')
   const stage = panel.getByTestId('training-stage')
@@ -66,7 +71,7 @@ test('enter the training center, choose a sector and complete one five second dr
   expect(roster[0].xp).toBe(before.xp)
   expect(roster[0].level).toBe(before.level)
   expect(roster[0].stats.dribbling).toBe(before.stats.dribbling + 0.25)
-  expect(roster[0].stats.passing).toBe(before.stats.passing)
+  expect(roster[0].stats.finishing).toBe(before.stats.finishing)
   await expect(stage.locator('.training-progress')).toContainText(`${(before.stats.dribbling + 0.25).toLocaleString('pt-BR')}/99 · +0,25 por treino`)
   await panel.getByRole('button', { name: 'Voltar ao centro' }).click()
   await openSector('DRIBBLING')

@@ -174,9 +174,9 @@ class DuelMatchEngineTest {
         assertFailsWith<IllegalArgumentException> { request(1).copy(away = request(1).home) }
         assertFailsWith<IllegalArgumentException> { request(1).home.single().copy(level = 0) }
         for (invalid in listOf(0, 100, Int.MIN_VALUE, Int.MAX_VALUE)) {
-            for (index in 0..5) {
-                val stats = MutableList(6) { 50 }.also { it[index] = invalid }
-                assertFailsWith<IllegalArgumentException> { MatchStats(stats[0], stats[1], stats[2], stats[3], stats[4], stats[5]) }
+            for (index in 0..4) {
+                val stats = MutableList(5) { 50 }.also { it[index] = invalid }
+                assertFailsWith<IllegalArgumentException> { MatchStats(stats[0], stats[1], stats[2], stats[3], stats[4]) }
             }
         }
     }
@@ -201,6 +201,6 @@ class DuelMatchEngineTest {
         playerDefinitionId = "definition_$id",
         name = id,
         level = 1,
-        stats = MatchStats(stat, stat, stat, stat, stat, stat),
+        stats = MatchStats(stat, stat, stat, stat, stat),
     )
 }

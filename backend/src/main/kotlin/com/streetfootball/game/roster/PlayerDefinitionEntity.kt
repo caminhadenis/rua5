@@ -29,8 +29,6 @@ class PlayerDefinitionEntity(
     @field:Column(nullable = false)
     var dribbling: Int = 1,
     @field:Column(nullable = false)
-    var passing: Int = 1,
-    @field:Column(nullable = false)
     var finishing: Int = 1,
     @field:Column(nullable = false)
     var defending: Int = 1,

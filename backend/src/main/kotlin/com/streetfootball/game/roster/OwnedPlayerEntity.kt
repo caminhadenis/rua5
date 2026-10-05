@@ -34,8 +34,6 @@ class OwnedPlayerEntity(
     var trainingSpeedQuarters: Int = 0,
     @field:Column(name = "training_dribbling", nullable = false)
     var trainingDribblingQuarters: Int = 0,
-    @field:Column(name = "training_passing", nullable = false)
-    var trainingPassingQuarters: Int = 0,
     @field:Column(name = "training_finishing", nullable = false)
     var trainingFinishingQuarters: Int = 0,
     @field:Column(name = "training_defending", nullable = false)
@@ -53,7 +51,6 @@ class OwnedPlayerEntity(
         StatBonuses(
             trainingSpeedQuarters * TrainingPolicy.STAT_GAIN,
             trainingDribblingQuarters * TrainingPolicy.STAT_GAIN,
-            trainingPassingQuarters * TrainingPolicy.STAT_GAIN,
             trainingFinishingQuarters * TrainingPolicy.STAT_GAIN,
             trainingDefendingQuarters * TrainingPolicy.STAT_GAIN,
             trainingPhysicalQuarters * TrainingPolicy.STAT_GAIN,
@@ -63,7 +60,6 @@ class OwnedPlayerEntity(
         when (focus) {
             TrainingFocus.SPEED -> trainingSpeedQuarters++
             TrainingFocus.DRIBBLING -> trainingDribblingQuarters++
-            TrainingFocus.PASSING -> trainingPassingQuarters++
             TrainingFocus.FINISHING -> trainingFinishingQuarters++
             TrainingFocus.DEFENDING -> trainingDefendingQuarters++
             TrainingFocus.PHYSICAL -> trainingPhysicalQuarters++

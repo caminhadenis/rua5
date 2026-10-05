@@ -50,7 +50,6 @@ data class StarterResponse(
 data class PlayerStatsResponse(
     val speed: Int,
     val dribbling: Int,
-    val passing: Int,
     val finishing: Int,
     val defending: Int,
     val physical: Int,
@@ -78,7 +77,6 @@ private fun PlayerDefinition.toResponse() =
             PlayerStatsResponse(
                 speed = speed,
                 dribbling = dribbling,
-                passing = passing,
                 finishing = finishing,
                 defending = defending,
                 physical = physical,
