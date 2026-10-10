@@ -1,3 +1,9 @@
+import challengerBunUrl from '../../assets/placeholders/challenger-bun.svg?no-inline'
+import challengerBunSvg from '../../assets/placeholders/challenger-bun.svg?raw'
+import challengerCapUrl from '../../assets/placeholders/challenger-cap.svg?no-inline'
+import challengerCapSvg from '../../assets/placeholders/challenger-cap.svg?raw'
+import challengerBeardUrl from '../../assets/placeholders/challenger-beard.svg?no-inline'
+import challengerBeardSvg from '../../assets/placeholders/challenger-beard.svg?raw'
 import type Phaser from 'phaser'
 import playerUrl from '../../assets/placeholders/player.svg?no-inline'
 import challengerUrl from '../../assets/placeholders/challenger.svg?no-inline'
@@ -15,8 +21,9 @@ export const DEFAULT_TEAM_COLORS: TeamColors = { primaryColor: '#f7d154', second
 export const originalUniformUrls = {
   player: playerUrl, challenger: challengerUrl, 'challenger-curls': challengerCurlsUrl,
   'challenger-headband': challengerHeadbandUrl, 'duel-emotions': emotionsUrl,
+  'challenger-bun': challengerBunUrl, 'challenger-cap': challengerCapUrl, 'challenger-beard': challengerBeardUrl,
 }
-export type ChallengerAsset = 'challenger' | 'challenger-curls' | 'challenger-headband'
+export type ChallengerAsset = 'challenger' | 'challenger-curls' | 'challenger-headband' | 'challenger-bun' | 'challenger-cap' | 'challenger-beard'
 type UniformAsset = 'player' | ChallengerAsset | 'duel-emotions'
 const starterFeatures: Record<string, { skin: string; hair: string }> = {
   starter_leo: { skin: '#c58b61', hair: '#654335' },
@@ -26,6 +33,7 @@ const starterFeatures: Record<string, { skin: string; hair: string }> = {
 const sources = {
   player: playerSvg, challenger: challengerSvg, 'challenger-curls': challengerCurlsSvg,
   'challenger-headband': challengerHeadbandSvg, 'duel-emotions': emotionsSvg,
+  'challenger-bun': challengerBunSvg, 'challenger-cap': challengerCapSvg, 'challenger-beard': challengerBeardSvg,
 }
 let currentColors = DEFAULT_TEAM_COLORS
 const urls = new Map<string, string>()
@@ -45,6 +53,9 @@ export function uniformSvg(asset: UniformAsset, colors: TeamColors): string {
     challenger: { primary: '#de725a', secondary: ['#ad5146'] },
     'challenger-curls': { primary: '#5d9c74', secondary: ['#e0d7a6', '#f5ead2'] },
     'challenger-headband': { primary: '#536d9d', secondary: ['#f7d154', '#aebbd0'] },
+    'challenger-bun': { primary: '#dd8b4c', secondary: ['#f5ead2'] },
+    'challenger-cap': { primary: '#56a29c', secondary: ['#f5ead2'] },
+    'challenger-beard': { primary: '#bd6d9d', secondary: ['#f5ead2'] },
   }
   const { primary, secondary } = palettes[asset]
   // One pass prevents a chosen color matching an original color from being replaced twice.
@@ -58,11 +69,11 @@ export function uniformSvg(asset: UniformAsset, colors: TeamColors): string {
 
 const challengerAppearances: Record<string, ChallengerAsset> = {
   npc_nilo_01: 'challenger', npc_cora_01: 'challenger-curls', npc_davi_01: 'challenger-headband',
-  npc_bia_01: 'challenger', npc_rui_01: 'challenger-curls', npc_sol_01: 'challenger-headband',
-  npc_teca_01: 'challenger', npc_zeca_01: 'challenger-curls', npc_iris_01: 'challenger-headband',
-  npc_bento_01: 'challenger', npc_lua_01: 'challenger-curls', npc_caue_01: 'challenger-headband',
-  npc_nina_01: 'challenger', npc_beto_01: 'challenger-curls', npc_joca_01: 'challenger-headband',
-  npc_maiara_01: 'challenger',
+  npc_bia_01: 'challenger-bun', npc_rui_01: 'challenger-beard', npc_sol_01: 'challenger-cap',
+  npc_teca_01: 'challenger-cap', npc_zeca_01: 'challenger-curls', npc_iris_01: 'challenger-headband',
+  npc_bento_01: 'challenger-beard', npc_lua_01: 'challenger-bun', npc_caue_01: 'challenger-headband',
+  npc_nina_01: 'challenger-bun', npc_beto_01: 'challenger-beard', npc_joca_01: 'challenger-headband',
+  npc_maiara_01: 'challenger-cap',
 }
 
 export function challengerAsset(id: string | undefined): ChallengerAsset {
@@ -70,7 +81,7 @@ export function challengerAsset(id: string | undefined): ChallengerAsset {
 }
 
 export function originalChallengerUrl(id: string | undefined): string {
-  return originalUniformUrls[challengerAsset(id)]
+  return id?.startsWith('starter_') ? starterUniformUrl(id, DEFAULT_TEAM_COLORS) : originalUniformUrls[challengerAsset(id)]
 }
 
 export function uniformUrl(asset: UniformAsset, colors: TeamColors = currentColors): string {
@@ -124,7 +135,7 @@ export function ownedPlayerEmotionUrl(id: string | undefined, colors: TeamColors
 }
 
 /** Upload fixed raster pixels rather than letting the mobile GPU size an SVG image. */
-async function addWalkingTexture(scene: Phaser.Scene, key: string, url: string): Promise<void> {
+export async function addWalkingTexture(scene: Phaser.Scene, key: string, url: string): Promise<void> {
   const image = new Image()
   image.src = url
   await image.decode()

@@ -1,3 +1,5 @@
+import { persistentRoster } from './helpers/roster'
+import { startOpening, continueGame, finishStarterGuidance } from './helpers/opening'
 import { expect, test, type Page } from '@playwright/test'
 import type { DuelResponse, MatchEvent, RosterPlayer } from '../src/api/gameApi'
 
@@ -14,8 +16,10 @@ async function walkToNpc(page: Page) {
   await expect.poll(() => page.evaluate(async () => {
     const entry = '/src/main.ts'
     const { game } = await import(entry)
-    return game.scene.isActive('WorldScene')
+    const world = game.scene.getScene('WorldScene')
+    return game.scene.isActive('WorldScene') && !world.choosing
   })).toBe(true)
+  await expect(page.locator('.scene-panel')).toHaveCount(0)
   await page.keyboard.down('ArrowRight')
   await expect.poll(() => page.evaluate(async () => {
     const entry = '/src/main.ts'
@@ -36,9 +40,10 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
-  await page.getByRole('button', { name: 'Começar', exact: true }).click()
+  await startOpening(page)
   await page.getByRole('button', { name: 'Confirmar cores', exact: true }).click()
   await page.getByRole('button', { name: 'Escolher Loraco' }).click()
+  await finishStarterGuidance(page)
   await walkToNpc(page)
   await expect(page.getByRole('radio', { name: 'Loraco, nível 1' })).toBeChecked()
   await expect(page.locator('.player-card-sprite')).toHaveCSS('background-image', /d8a83e/)
@@ -110,12 +115,13 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   expect(latestRoster[0].wins + latestRoster[0].draws + latestRoster[0].losses).toBe(2)
   expect(commands).toBe(2)
   await page.reload()
+  await continueGame(page)
   await expect.poll(() => page.evaluate(async () => {
     const entry = '/src/main.ts'
     const { game } = await import(entry)
     return game.scene.isActive('WorldScene')
   })).toBe(true)
-  expect((await (await page.request.get('/api/v1/roster')).json())[0]).toEqual(latestRoster[0])
+  expect(persistentRoster(await (await page.request.get('/api/v1/roster')).json())[0]).toEqual(persistentRoster(latestRoster)[0])
   expect(errors).toEqual([])
 })
 
@@ -124,6 +130,7 @@ test('lost response retries the same command and normal completion grants no add
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Retry' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
   await page.goto('/')
+  await continueGame(page)
   await walkToNpc(page)
   const keys: string[] = []
   let original: DuelResponse | undefined
@@ -161,6 +168,7 @@ test('player cards support mouse and keyboard and send the chosen owned player',
   const roster: RosterPlayer[] = [starter!, { ...starter!, id: 'second-owned-player', playerDefinitionId: 'npc_cora_01', name: 'Cora', level: 2 }]
   await page.route('**/api/v1/roster', route => route.fulfill({ json: roster }))
   await page.goto('/')
+  await continueGame(page)
   await walkToNpc(page)
   const leo = page.getByRole('radio', { name: 'Cabeleira, nível 1' })
   const cora = page.getByRole('radio', { name: 'Cora, nível 2' })
@@ -187,6 +195,7 @@ test('challenger reacts to each server outcome and offers a rematch', async ({ p
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Conversa' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
   await page.goto('/')
+  await continueGame(page)
   await walkToNpc(page)
   const outcomes = [
     { outcome: 'WIN', homeScore: 1, awayScore: 0, text: 'Parabéns pela vitória!' },
@@ -226,6 +235,7 @@ test('goal raises the scorer arms, holds the caption and shows winner and loser 
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Comemoração' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
   await page.goto('/')
+  await continueGame(page)
   await walkToNpc(page)
   // Fixed presentation fixture: the real-API smoke above covers simulation and persistence.
   const result: DuelResponse = {
@@ -261,6 +271,7 @@ test('both teams shoot into their net and a missed shot stays outside', async ({
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Gols dos dois lados' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
   await page.goto('/')
+  await continueGame(page)
   await walkToNpc(page)
   const events: MatchEvent[] = [
     { sequence: 1, minute: 1, type: 'GOAL', side: 'HOME', actorPlayerId: 'home', homeScore: 1, awayScore: 0 },
@@ -322,6 +333,7 @@ test('duel events move the athletes, carry the ball, dribble and tackle', async 
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Coreografia' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_rafa' } })
   await page.goto('/')
+  await continueGame(page)
   await walkToNpc(page)
   const events: MatchEvent[] = [
     { sequence: 1, minute: 1, type: 'POSSESSION', side: 'HOME', actorPlayerId: 'home', homeScore: 0, awayScore: 0 },

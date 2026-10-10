@@ -1,3 +1,4 @@
+import { continueGame } from './helpers/opening'
 import { expect, test, type Page } from '@playwright/test'
 
 test.beforeEach(async ({ page }) => {
@@ -43,6 +44,7 @@ test('open map, walk, collide, follow camera and meet the challenger', async ({ 
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('request', request => { if (request.method() !== 'GET') commands.push(request.url()) })
   await page.goto('/')
+  await continueGame(page)
   await expect(page.locator('canvas')).toBeVisible()
   await expect.poll(() => worldState(page)).not.toBeNull()
 
@@ -132,6 +134,7 @@ test('open map, walk, collide, follow camera and meet the challenger', async ({ 
 
 test('walking alternates poses, faces the travel direction and returns to rest', async ({ page }, testInfo) => {
   await page.goto('/')
+  await continueGame(page)
   await expect.poll(() => worldState(page)).not.toBeNull()
   expect((await worldState(page))!.frame).toBe('front-0')
 
@@ -160,6 +163,7 @@ test('walking alternates poses, faces the travel direction and returns to rest',
 
 test('map borders stop movement and the camera stays inside the neighborhood', async ({ page }) => {
   await page.goto('/')
+  await continueGame(page)
   await expect.poll(() => worldState(page)).not.toBeNull()
   await page.keyboard.down('a')
   await expect.poll(async () => (await worldState(page))!.left, { timeout: 4000 }).toBeLessThanOrEqual(32.1)
@@ -179,6 +183,7 @@ test('houses and residents add city conversations without starting duels', async
   const commands: string[] = []
   page.on('request', request => { if (request.method() !== 'GET') commands.push(request.url()) })
   await page.goto('/')
+  await continueGame(page)
   await expect.poll(() => worldState(page)).not.toBeNull()
   await page.keyboard.down('ArrowLeft')
   // Approach Lia from the west, outside the newer challenger Beto's detection radius.
@@ -203,7 +208,7 @@ test('houses and residents add city conversations without starting duels', async
     }
   })
   expect(await conversation()).toMatchObject({ canChallenge: false, challengeVisible: false, houses: 4, floatingNames: 0 })
-  expect((await conversation()).text).toContain('Dona Lia · Morador')
+  expect((await conversation()).text).toContain('Dona Celina · Morador')
   expect((await conversation()).text).toContain('estádio')
   await page.screenshot({ path: testInfo.outputPath('houses-and-resident.png') })
   await page.keyboard.press('Enter', { delay: 80 })
@@ -221,6 +226,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
   page.on('pageerror', error => errors.push(error.message))
   page.on('request', request => { if (request.method() !== 'GET') commands.push(request.url()) })
   await page.goto('/')
+  await continueGame(page)
   await expect.poll(() => worldState(page)).not.toBeNull()
   const landmarks = await page.evaluate(async () => {
     const { game } = await import('/src/main.ts')
@@ -231,7 +237,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
   await page.evaluate(async () => {
     const { game } = await import('/src/main.ts')
     const world = game.scene.getScene('WorldScene')
-    world.player.setPosition(world.stadiumPoint.x, world.stadiumPoint.y)
+    world.player.setPosition(world.stadiumPoint.x - 90, world.stadiumPoint.y)
   })
   await page.waitForTimeout(150)
   await page.screenshot({ path: testInfo.outputPath('stadium-on-map.png') })
@@ -241,7 +247,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
       const world = game.scene.getScene('WorldScene')
       const door = world.doors.find((place: { key: string }) => place.key === doorKey)
       world.player.setPosition(door.x, door.y + 15)
-      return { x: world.player.x, y: world.player.y }
+      return { x: door.x, y: door.y + 32 }
     }, key)
     await page.keyboard.press('e', { delay: 80 })
     await expect.poll(() => page.evaluate(async () => {
@@ -259,7 +265,7 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
         const { game } = await import('/src/main.ts')
         const interior = game.scene.getScene('InteriorScene')
         return {
-          coaches: interior.people.filter((person: { focus?: string }) => person.focus).length as number,
+          coaches: interior.people.filter((person: { role?: string }) => person.role === 'trainer').length as number,
           trainees: interior.children.list.filter((child: { name?: string }) => child.name?.startsWith('training-athlete-')).length as number,
         }
       })

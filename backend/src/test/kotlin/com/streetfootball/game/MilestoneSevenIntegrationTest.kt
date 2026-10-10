@@ -265,20 +265,22 @@ class MilestoneSevenIntegrationTest {
                     matchCount++
                     val roster = body(send(client, "GET", "/roster"))
                     assertEquals(result, body(send(client, "POST", path, payload, key)))
-                    assertEquals(roster, body(send(client, "GET", "/roster")))
+                    assertEquals(persistentRoster(roster), persistentRoster(body(send(client, "GET", "/roster"))))
                     if (result["match"]["outcome"].asString() == "WIN") return result
                 }
                 error("$starter could not win $path within 30 attempts")
             }
+            val preferred = setOf(starter, "npc_rui_01", "npc_sol_01", "npc_teca_01", "npc_zeca_01")
+            val desiredChallengers = (5..8).map { "00000000-0000-4000-8000-${it.toString().padStart(12, '0')}" }.toSet()
             for (challenger in challengers) {
                 win("/challenges/$challenger/matches", mapOf("ownedPlayerId" to chosen["id"].asString()))
+                if (challenger !in desiredChallengers) continue
                 val path = "/challenges/$challenger/recruit"
                 val recruited = body(send(client, "POST", path))
                 assertEquals(recruited, body(send(client, "POST", path)))
             }
             val roster = body(send(client, "GET", "/roster"))
-            assertEquals(17, roster.size())
-            val preferred = setOf(starter, "npc_rui_01", "npc_sol_01", "npc_teca_01", "npc_zeca_01")
+            assertEquals(5, roster.size())
             val ids = roster.filter { it["playerDefinitionId"].asString() in preferred }.map { it["id"].asString() }
             body(send(client, "PUT", "/lineup", mapOf("ownedPlayerIds" to ids.take(4) + null)))
             val stadium = "/stadiums/benfica_stadium"
@@ -324,7 +326,7 @@ class MilestoneSevenIntegrationTest {
     }
 
     @Test
-    fun `training improves stat every session without XP or levels and rate limits each athlete independently`() {
+    fun `training improves stat every session without XP or levels and without a wait`() {
         val client = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         val profileId = body(send(client, "POST", "/profiles", mapOf("displayName" to "Treino")))["id"].asString()
         val starter = body(send(client, "POST", "/profile/starter", mapOf("playerDefinitionId" to "starter_leo")))
@@ -353,8 +355,7 @@ class MilestoneSevenIntegrationTest {
         assertEquals(first["statAfter"], after["stats"]["dribbling"])
         assertEquals(before["stats"]["finishing"], after["stats"]["finishing"])
         val status = body(send(client, "GET", "/training/status"))
-        assertEquals(playerId, status["cooldowns"][0]["ownedPlayerId"].asString())
-        assertEquals(first["nextAvailableAt"], status["cooldowns"][0]["nextAvailableAt"])
+        assertEquals(0, status["cooldowns"].size())
         assertEquals(0, status["progress"][0]["completed"].asInt())
         assertEquals(
             1,
@@ -364,9 +365,6 @@ class MilestoneSevenIntegrationTest {
                 UUID.fromString(playerId),
             ),
         )
-        val cooldown = send(client, "POST", path, payload, UUID.randomUUID())
-        assertEquals(409, cooldown.statusCode())
-        assertEquals("TRAINING_COOLDOWN", json.readTree(cooldown.body())["code"].asString())
         val secondPlayer = UUID.randomUUID()
         jdbc.update(
             "INSERT INTO owned_player (id, profile_id, player_definition_id, recruited_at) VALUES (?, ?, ?, now())",
@@ -387,7 +385,7 @@ class MilestoneSevenIntegrationTest {
         assertEquals(0, secondAthlete["progressBefore"].asInt())
         assertEquals(0, secondAthlete["progressAfter"].asInt())
         assertEquals(secondAthlete["statBefore"].asDouble() + 0.25, secondAthlete["statAfter"].asDouble())
-        assertEquals(2, body(send(client, "GET", "/training/status"))["cooldowns"].size())
+        assertEquals(0, body(send(client, "GET", "/training/status"))["cooldowns"].size())
         assertEquals(409, send(client, "POST", path, payload + ("focus" to "FINISHING"), key).statusCode())
         val other = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         body(send(other, "POST", "/profiles", mapOf("displayName" to "Outro")))
@@ -396,10 +394,6 @@ class MilestoneSevenIntegrationTest {
         assertEquals(400, send(client, "POST", path, payload + ("focus" to "GOALKEEPING"), UUID.randomUUID()).statusCode())
         var latest = first
         for (session in 2..5) {
-            jdbc.update(
-                "UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?",
-                UUID.fromString(playerId),
-            )
             latest = body(send(client, "POST", path, payload, UUID.randomUUID()))
             assertEquals(0, latest["progressAfter"].asInt())
             assertEquals(before["stats"]["dribbling"].asDouble() + session * 0.25, latest["statAfter"].asDouble())
@@ -418,15 +412,10 @@ class MilestoneSevenIntegrationTest {
             body(send(client, "GET", "/training/status"))["progress"]
                 .first { it["ownedPlayerId"].asString() == playerId && it["focus"].asString() == "DRIBBLING" }
         assertEquals(0, playerProgress["completed"].asInt())
-        jdbc.update(
-            "UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?",
-            UUID.fromString(playerId),
-        )
         val otherFocus = body(send(client, "POST", path, payload + ("focus" to "FINISHING"), UUID.randomUUID()))
         assertEquals(0, otherFocus["progressBefore"].asInt())
         assertEquals(0, otherFocus["progressAfter"].asInt())
         assertEquals(otherFocus["statBefore"].asDouble() + 0.25, otherFocus["statAfter"].asDouble())
-        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
         val otherAthlete =
             body(send(client, "POST", path, mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING"), UUID.randomUUID()))
         assertEquals(0, otherAthlete["progressBefore"].asInt())
@@ -442,8 +431,10 @@ class MilestoneSevenIntegrationTest {
                     UUID.randomUUID(),
                 ),
             )
-        assertEquals(latest["statAfter"], duel["match"]["home"][0]["stats"]["dribbling"])
-        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
+        assertEquals(
+            latest["statAfter"].asDouble() * (1 - duel["rewards"]["fatigue"]["before"]["penaltyPercent"].asInt() / 100.0),
+            duel["match"]["home"][0]["stats"]["dribbling"].asDouble(),
+        )
         val cappedPayload = mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING")
         val baseDribbling = definitions.findById("starter_rafa").orElseThrow().dribbling
         jdbc.update("UPDATE owned_player SET training_dribbling = ? WHERE id = ?", (99 - baseDribbling) * 4 - 1, secondPlayer)
@@ -451,7 +442,6 @@ class MilestoneSevenIntegrationTest {
         val capped = body(send(client, "POST", path, cappedPayload, capKey))
         assertEquals(98.75, capped["statBefore"].asDouble())
         assertEquals(99.0, capped["statAfter"].asDouble())
-        jdbc.update("UPDATE training_session SET trained_at = now() - interval '61 seconds' WHERE owned_player_id = ?", secondPlayer)
         val maxed = send(client, "POST", path, cappedPayload, UUID.randomUUID())
         assertEquals(409, maxed.statusCode())
         assertEquals("TRAINING_STAT_MAX", json.readTree(maxed.body())["code"].asString())
@@ -461,7 +451,7 @@ class MilestoneSevenIntegrationTest {
         for (field in listOf("statBefore", "statAfter", "progressBefore", "progressAfter", "currentLevel", "currentXp")) {
             assertEquals(first[field], retried[field])
         }
-        assertEquals(currentRoster, body(send(client, "GET", "/roster")))
+        assertEquals(persistentRoster(currentRoster), persistentRoster(body(send(client, "GET", "/roster"))))
     }
 
     @Test

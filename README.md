@@ -1,4 +1,4 @@
-# Jogo de Rua
+# Rua 5
 
 RPG single-player de futebol descrito em [`docs/GAME_SPEC.md`](docs/GAME_SPEC.md).
 O repositório contém o **Milestone 7**: o primeiro bairro pode ser concluído do perfil
@@ -204,8 +204,17 @@ Abra `http://localhost:5173`.
 ## Jogar o fluxo dos Milestones 4 e 5
 
 Backend e banco precisam estar ativos. O Vite encaminha `/api` ao backend em `localhost:8080`.
-Na primeira visita, informe o nome, clique **Começar** e escolha um dos três starters.
-Uma sessão existente entra no mundo com seu elenco persistido.
+O menu pixelado **Rua 5** oferece **INICIAR**, **CONTINUAR** e **OPÇÕES**.
+INICIAR abre a formatura na universidade: o reitor entrega o canudo, pede seu nome
+e explica os desafios, recrutamento, cansaço e estádio. Após as falas, caminhe até
+a saída. Miguel se aproxima na rua, pergunta as cores do time e oferece os três
+starters existentes. O personagem controlado é sempre o mesmo treinador pardo,
+de cabelo preto e uniforme de educação física; os atletas entram apenas nas partidas.
+
+CONTINUAR fica disponível quando há um perfil na sessão e retoma o progresso do
+PostgreSQL e a posição local na rua ou interior. INICIAR cria outra jornada, sem
+apagar registros anteriores. OPÇÕES permanece desabilitado. A sessão atual ainda
+não é uma conta persistente entre reinícios do backend ou dispositivos.
 
 - **Setas / WASD:** caminhar; vá à direita até Nilo na quadra.
 - Ao entrar na área à frente de um desafiante, o personagem para, o NPC caminha até ele e a fala abre após a aproximação, uma vez por entrada na área.
@@ -221,16 +230,26 @@ Uma sessão existente entra no mundo com seu elenco persistido.
 - Ao vencer Nilo, **Convidar para o time** fica disponível no resultado e na tela Equipe.
   O convite cria somente um jogador, mesmo após retries, revanches ou cliques simultâneos.
 - **Equipe / T:** abrir o elenco e selecionar um cartão para consultar seus atributos,
-  além dos convites e conquistas. Não há slots de posição ou escalação para salvar.
-- Um atleta próprio é suficiente para disputar o estádio. Escolha quem vai jogar
-  antes de cada duelo 1x1; os demais atletas são alternativas opcionais.
+  além dos convites, dispensa e conquistas. Disponível também nos interiores.
+  O elenco tem no máximo **5 jogadores**; para contratar outro com o time cheio,
+  selecione um atleta e confirme **Dispensar**. Ele vira desafiante no ponto atual
+  do bairro (na entrada externa, se estiver dentro de um prédio), inclusive após reload.
+  Nível, XP e treinos são preservados; é possível convidá-lo novamente quando houver vaga.
+  Não há slots de posição ou escalação para salvar.
+- Reúna pelo menos cinco atletas para desafiar Dimas. Com menos jogadores, ele
+  recusa na conversa e a API rejeita sem criar partida. Escolha um atleta por duelo 1x1; pode repetir ou trocar.
 
 ### API de recrutamento e elenco
 
 - `GET /api/v1/challenges/{id}`: status `LOCKED`, `AVAILABLE` ou `RECRUITED` e histórico da sessão.
 - `POST /api/v1/challenges/{id}/recruit`: sem body obrigatório; idempotente por perfil/desafiante,
   sem necessidade de `Idempotency-Key`. Retorna `{challengerId, ownedPlayerId}` estável.
-- `GET /api/v1/roster`: elenco da sessão, com nível, XP, arquétipo, função e stats efetivos.
+- `GET /api/v1/roster`: elenco ativo da sessão, com nível, XP, arquétipo, função e stats efetivos.
+- `POST /api/v1/roster/{id}/dismiss`: `Idempotency-Key: UUID` e corpo
+  `{ "mapId": "benfica", "x": 704, "y": 640 }`. Libera a vaga e preserva o atleta.
+- `GET /api/v1/maps/benfica/released-players`: desafiantes dispensados da sessão e sua posição.
+- Com cinco ativos, contratação nova retorna `409 ROSTER_FULL`; um retry já confirmado
+  continua válido. `GET /challenges/{id}` inclui `rosterFull` para apresentar o bloqueio.
 - `GET /api/v1/lineup` e `PUT /api/v1/lineup`: `{ "ownedPlayerIds": ["<id>", null, null, null, null] }`.
   Contrato legado mantido por compatibilidade, sem uso pela tela Equipe ou pelos duelos.
   O array deve ter cinco posições, sem IDs repetidos e somente com jogadores da sessão.
@@ -250,7 +269,7 @@ O autor do gol levanta os braços, com mensagem por 1,8 s (mínimo de 0,9 s em 4
 No final, o vencedor fica feliz e o perdedor cabisbaixo; em empate ficam neutros. Acelerar/pular só alteram a apresentação:
 placar e recompensas já foram persistidos pelo servidor. Em falha de resposta, **Tentar
 novamente** mantém a mesma chave de idempotência. Recarregar mantém XP/nível enquanto a
-sessão continuar válida; a posição no mapa ainda volta à entrada.
+sessão continuar válida; CONTINUAR retoma o último checkpoint local na rua ou interior.
 
 O personagem colide com construções, cercas vivas e o NPC. A câmera acompanha o movimento
 e respeita os limites do bairro. O diálogo e a seleção pausam o movimento.
@@ -263,23 +282,24 @@ concede +0,25 no fundamento escolhido, até 99; quatro sessões somam +1. A melh
 fracionada aparece na tela e já vale nas próximas partidas. A treinadora Jo explica
 a regra ao entrar no centro. O treino não concede XP nem aumenta o nível; o nível
 sobe com XP das partidas e concede +1 em todos os atributos.
-Cada atleta tem seu próprio intervalo de 1 minuto;
-outro atleta pode treinar imediatamente. A melhora aparece em Equipe e vale nas próximas
+Não há espera entre sessões, mesmo com o atleta exausto. Ao terminar a animação,
+clique em **Treinar novamente** para repetir imediatamente. Cada sessão gera +12 de cansaço. A melhora aparece em Equipe e vale nas próximas
 partidas. Cada departamento tem um treinador; converse com ele e pressione Enter para
 abrir a escolha do atleta.
 
 `POST /api/v1/training/sessions` recebe `Idempotency-Key: <uuid>` e JSON
 `{"ownedPlayerId":"<uuid>","focus":"DRIBBLING"}`. Os focos aceitos são
 `SPEED`, `DRIBBLING`, `FINISHING`, `DEFENDING` e `PHYSICAL`.
-`GET /api/v1/training/status` retorna `cooldowns` por `ownedPlayerId`; os campos de
+`GET /api/v1/training/status` retorna `cooldowns: []`; os campos de
 progresso são mantidos para compatibilidade, com zero após novas sessões. A resposta
 do comando contém atributo anterior/atual (agora aceitando quartos de ponto) e
-`nextAvailableAt`. A V20 preserva os bônus existentes ao convertê-los em quartos
+`nextAvailableAt` igual ao horário da nova sessão. Recibos históricos preservam seu
+horário original ao repetir a chave, sem bloquear novas sessões. A V20 preserva os bônus existentes ao convertê-los em quartos
 de ponto inteiros no banco; não concede recompensas retroativas por sessões parciais.
 O servidor valida
-posse, aplica cooldown e persiste a recompensa de forma transacional. Repetir a
-mesma chave recupera o resultado; nova chave antes do prazo retorna
-`409 TRAINING_COOLDOWN`.
+posse e persiste bônus e desgaste de forma transacional. Repetir a
+mesma chave recupera o resultado sem reaplicar ganho ou desgaste. A V23 remove
+a espera entre treinos; o frontend permite apenas uma animação por vez.
 
 O mapa está em [`frontend/src/assets/maps/benfica.json`](frontend/src/assets/maps/benfica.json),
 no formato Tiled JSON (72 × 50 tiles de 32 px). Ele pode ser aberto no Tiled; preserve as
@@ -374,7 +394,7 @@ selecionam starter, desafiam Nilo pela API real e verificam timeline, acelerar, 
 conclusão temporal, recompensa, roster e reload. Um teste perde deliberadamente a resposta
 após o commit e confirma que o retry não duplica XP. O smoke de M5 também perde as respostas
 de recrutamento, recupera o comando e valida persistência após reload.
-Uma fixture adicional cobre consulta de mais de cinco atletas, atributos fracionados,
+Uma fixture adicional cobre consulta de saves legados com mais de cinco atletas, atributos fracionados,
 navegação por teclado e ausência de chamadas à API legada de lineup.
 Capturas ficam em `frontend/test-results/`. Vitest cobre playback,
 apresentação de eventos, API/retry, movimento e integridade do mapa.
@@ -432,14 +452,14 @@ Escolha um atleta do elenco para cada duelo, podendo repetir ou trocar entre jog
 Dimas possui cinco adversários, ordenados por nível e soma dos atributos efetivos;
 o melhor entra por último. Vença os cinco consecutivamente para ganhar a taça.
 Uma derrota encerra a tentativa e exige recomeçar pelo primeiro rival.
-Empates são decididos nos pênaltis. Não precisa formar ou escalar cinco atletas.
+Empates são decididos nos pênaltis. Precisa reunir cinco atletas no elenco, sem montar lineup.
 
 Na quadra há somente dois jogadores. A torcida usa avatares maiores, braços animados,
 bandeiras e faixa vermelho/creme em arquibancadas nos quatro lados, fora da área de
 jogo. Dimas aparece nas conversas: após cada duelo, a quadra dá lugar ao seu retrato
 e comentário. Na vitória, ele anuncia o próximo rival; confirme para escolher seu
 atleta e iniciar o próximo desafio. O playback permite acelerar ou pular. Você pode
-retornar ao interior entre jogos; reload retoma a sequência ativa.
+retornar ao interior entre jogos; CONTINUAR após reload recupera a sequência ativa.
 
 API da sessão:
 
@@ -468,7 +488,7 @@ O caminho introdutório segue Nilo → Cora → Davi → Bia, avançando para le
 Cada vitória permite um convite no resultado ou na tela Equipe. Rui, Sol, Teca e Zeca
 oferecem alternativas mais fortes, com níveis de 2 a 5. A distância até o estádio diminui
 conforme o nível dos desafiantes aumenta. Os diálogos indicam onde procurar.
-O HUD orienta preparar um atleta e vencer os cinco duelos consecutivos no estádio;
+O HUD orienta reunir cinco atletas e vencer os cinco duelos consecutivos no estádio;
 após a vitória, mostra a conquista do bairro.
 
 As quatro casas, a escola, a academia e o prédio têm plantas, pisos, móveis e moradores
@@ -482,7 +502,7 @@ ou dependências extras). O botão **Som** permite silenciar e lembra a preferê
 Requisições têm timeout de 15 segundos e as telas oferecem recuperação. A mesma chave é
 mantida em retries de partida; resultados e recompensas vêm sempre do servidor.
 
-Reload restaura perfil/starter, XP/nível, recrutamentos e troféu do PostgreSQL,
+CONTINUAR após reload restaura perfil/starter, XP/nível, recrutamentos e troféu do PostgreSQL,
 enquanto a sessão HTTP continuar válida. A posição volta à entrada. A sessão ainda não
 é uma conta persistente entre reinícios do backend; autenticação pública permanece fora
 deste milestone.
@@ -531,7 +551,7 @@ contagens de partidas/troféus, retries sem XP duplicado e migrations em Postgre
 
 ### Personalização e moradores do bairro
 
-Ao começar, confirme as duas cores do time antes de escolher o primeiro jogador.
+Depois da formatura, Miguel pergunta as duas cores do time antes de escolher o primeiro jogador.
 Todos os recrutados usam esse uniforme e deixam de aparecer no mapa. As cores e o
 elenco são restaurados pela sessão do servidor ao recarregar.
 
@@ -553,3 +573,49 @@ Os atletas possuem cinco atributos: velocidade, drible, finalização, marcaçã
 A academia oferece cinco setores. A V21 adapta os saves e os snapshots sem recalcular
 placares ou recompensas, preservando os bônus dos atributos mantidos. O simulador
 coletivo foi removido; registros antigos continuam legíveis. Ver [ADR-0010](docs/decisions/ADR-0010-five-duel-attributes.md).
+
+### Cansaço dos atletas
+
+Treinos geram +12 de desgaste; duelos de rua e estádio geram +18. Cada atleta
+recupera 4 pontos por minuto real, inclusive fora do jogo. A partir de 30/60/85,
+os atributos usados em partidas caem temporariamente 5%/10%/15%. Níveis, XP e
+atributos conquistados são preservados; duelos seguem disponíveis mesmo exausto.
+O próximo treino pode começar assim que a animação da sessão terminar, sem
+tempo adicional de espera. Equipe e seleções mostram condição, recuperação e efeito nos atributos.
+Regras e contrato: seção 11.6 de `docs/GAME_SPEC.md`, ADRs 0011/0012 e migrations V22/V23.
+
+
+## Abertura e retomada
+
+A decisão e os limites de save estão no [ADR-0013](docs/decisions/ADR-0013-coach-opening-and-continue.md).
+A abertura não exige novas migrations. `/profile/new-game` exige chave de idempotência;
+`STADIUM_ROSTER_INCOMPLETE` é a recusa autoritativa para menos de cinco atletas.
+Os testes `opening.spec.ts`, `avatar-rendering.spec.ts` e `team-colors.spec.ts` cobrem
+formatura/nome, novo jogo, retomada da rua/interior, identidade fixa e uniformes do elenco.
+
+### Limite e dispensa do elenco
+
+A V24 preserva os registros de atletas dispensados e o histórico, aplicando o limite
+no servidor e no banco. Saves antigos com mais de cinco atletas continuam íntegros,
+mas precisam abrir vaga antes de contratar. Qualquer atleta, inclusive o último ou o
+starter, pode ser dispensado; o convite imediato permite recompor um elenco vazio.
+A recontratação usa a mesma identidade e não concede XP, treinos ou vitórias extras.
+Uma dispensa repetida com a mesma chave, mesmo após recontratação, devolve o recibo original.
+
+`MilestoneFiveIntegrationTest` cobre limite, concorrência, validação, privacidade,
+transações, progresso preservado e replay. `roster-limit.spec.ts` cobre o bloqueio da
+sexta contratação, cancelar/confirmar dispensa, resposta perdida, posição no mapa,
+reload, substituição e recuperação do starter. Ver [ADR-0015](docs/decisions/ADR-0015-roster-limit-and-dismissal.md).
+
+### Centro de Recuperação
+
+O centro fica isolado ao sul do Benfica, depois de uma trilha longa entre árvores.
+Aproxime-se de uma maca ou balde de gelo e use E/Enter (Recuperar no celular) para
+escolher um atleta. Macas e banhos de gelo recuperam todo o cansaço em 5 segundos,
+sem diferença entre as estações. A recuperação natural permanece em 4. O tratamento continua fora do prédio e ao fechar o jogo; até
+terminar, o atleta fica fora de treinos e partidas. Interromper no centro preserva o
+cansaço recuperado. Ao terminar, o atleta fica disponível automaticamente.
+
+A V25 persiste tratamentos e recibos idempotentes e amplia as posições de dispensa
+para a trilha do sul. Testes: `RecoveryIntegrationTest`, `RecoveryPolicyTest` e
+`frontend/e2e/recovery.spec.ts`. Decisão: `docs/decisions/ADR-0016-recovery-center.md`.

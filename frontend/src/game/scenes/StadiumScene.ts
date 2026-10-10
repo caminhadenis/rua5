@@ -1,7 +1,9 @@
 import Phaser from 'phaser'
+import { gameAudio } from '../audio/GameAudio'
 import { ApiError, StadiumCommand, stadiumApi, teamApi, type StadiumInfo, type StadiumResponse } from '../../api/gameApi'
 import { coachGreeting, coachVerdict } from '../match/stadiumPresentation'
 import { PlayerCards } from '../ui/PlayerCards'
+import { fatigueReceiptText } from '../ui/fatigue'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 
 export class StadiumScene extends Phaser.Scene {
@@ -15,6 +17,7 @@ export class StadiumScene extends Phaser.Scene {
     this.previousResult = data.result
   }
   create(): void {
+    gameAudio.setMusic('city')
     this.panel = scenePanel(this, 'Estádio')
     this.panel.classList.add('stadium-panel')
     void this.loadStadium()
@@ -43,6 +46,7 @@ export class StadiumScene extends Phaser.Scene {
     paragraph(this.panel, `${match.outcome === 'WIN' ? 'Vitória!' : 'Derrota'} ${match.home[0]!.name} ${match.homeScore} × ${match.awayScore} ${match.away[0]!.name}${penalties}`).dataset.testid = 'stadium-result'
     const award = rewards.players[0]!
     paragraph(this.panel, `+${award.xpAwarded} XP · Nível ${award.currentLevel}`)
+    if (award.fatigue) paragraph(this.panel, fatigueReceiptText(award.fatigue)).className = 'fatigue-status'
     paragraph(this.panel, `${rewards.series.wins}/5 vitórias nesta tentativa`).setAttribute('role', 'status')
     const actions = document.createElement('div')
     actions.className = 'stadium-actions'
@@ -105,8 +109,13 @@ export class StadiumScene extends Phaser.Scene {
       this.panel.append(actions)
       const back = button(actions, 'Voltar ao estádio', () => this.leave())
       if (info.status !== 'AVAILABLE') return
+      if (roster.length < 5) {
+        lines.replaceChildren()
+        paragraph(lines, `Não posso aceitar seu desafio ainda. Você precisa ter pelo menos 5 jogadores no elenco! Seu time tem ${roster.length}. Explore as ruas e convide novos atletas.`)
+        return
+      }
       paragraph(this.panel, `Dimas escolheu: ${opponent.name} · Nível ${opponent.level}`).className = 'stadium-next-opponent'
-      paragraph(this.panel, 'Escolha um atleta para este duelo. Pode usar o mesmo nos cinco jogos ou trocar entre eles.').className = 'selection-description'
+      paragraph(this.panel, 'Escolha um atleta para este duelo. Cada duelo gera +18 de desgaste. Pode repetir um atleta ou escolher outro descansado.').className = 'selection-description'
       const cards = new PlayerCards(roster)
       this.panel.append(cards.element)
       const status = paragraph(this.panel, '')
@@ -117,11 +126,13 @@ export class StadiumScene extends Phaser.Scene {
         back.disabled = true
         cards.disabled = true
         status.textContent = 'Simulando duelo…'
+        gameAudio.setMusic('duel')
         void this.command.play(this.id, cards.selectedId, info.series?.id ?? null, roundNumber).then(result => {
           if (!this.scene.isActive()) return
           this.scene.start('MatchScene', { match: result.match, rewards: null, stadium: result })
         }).catch((error: unknown) => {
           if (!this.scene.isActive()) return
+          gameAudio.setMusic('city')
           if (error instanceof ApiError && error.rejected) {
             status.textContent = 'Não foi possível iniciar. Atualize as condições do estádio.'
             back.disabled = false
@@ -133,7 +144,8 @@ export class StadiumScene extends Phaser.Scene {
           }
         })
       })
-      start.disabled = !roster.length
+      start.disabled = !cards.selectedId
+      cards.element.addEventListener('fatigue-updated', () => { if (!cards.element.disabled) start.disabled = !cards.selectedId })
     } catch {
       if (!this.scene.isActive()) return
       this.panel.replaceChildren()

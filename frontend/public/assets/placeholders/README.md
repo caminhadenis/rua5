@@ -5,7 +5,11 @@ de terceiros. São placeholders editáveis, renderizados como texturas pelo Phas
 
 - `tiles.svg`: atlas horizontal de 160 × 32 px, cinco tiles de 32 × 32 px, sem margem/espaçamento.
   Ordem: grama, calçamento, quadra, alvenaria e cerca viva.
-- `src/assets/placeholders/player.svg`: spritesheet de 128 × 120 px, com quadros de 32 × 40 px. As linhas são
+- `src/assets/placeholders/coach.svg`: avatar fixo controlado pelo usuário, pardo e de cabelo preto,
+  com polo, bermuda, tênis e apito. Tem 128 × 120 px e doze quadros de 32 × 40 px;
+  não recebe as cores do time nem muda com o starter. É rasterizado antes do recorte.
+- `rua5-logo.svg`: nome original do jogo com letras de 5 × 7 pixels, usado no menu.
+- `src/assets/placeholders/player.svg`: spritesheet dos atletas, de 128 × 120 px, com quadros de 32 × 40 px. As linhas são
   frente, lateral direita (espelhada para esquerda) e costas. Cada linha tem quatro fases:
   pernas alinhadas, passada esquerda, pernas alinhadas e passada direita. Braços alternam
   e o corpo oscila 1 px; a sombra e a caixa de colisão permanecem estáveis.
@@ -32,3 +36,10 @@ disponibilidade, partida ou progresso.
 - `resident.svg`: morador original (32 × 40 px), com roupa casual; conversa manual.
 - As variantes de uniforme são produzidas a partir dos SVGs locais em `teamColors.ts`.
   Apenas roupas são recoloridas; os SVGs originais continuam servindo os adversários.
+
+`resident-physio.svg` e `resident-masseur.svg` são avatares pixelados originais dos profissionais do Centro de Recuperação. Macas, baldes de gelo e a vegetação da trilha são desenhados em código no Phaser.
+
+Os moradores também possuem variantes originais de vestido, barba, trança, boné e
+cabelo cacheado em SVG 32×40. Os desafiantes ganharam coque, boné e barba; essas
+silhuetas seguem o sistema de uniformes nos cartões e duelos. Nenhum asset externo
+ou gerado em runtime é necessário.

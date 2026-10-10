@@ -1,19 +1,27 @@
 import Phaser from 'phaser'
+import { gameAudio } from '../audio/GameAudio'
 import { TouchControls } from '../input/TouchControls'
-import { isPhone, isPhonePortrait } from '../input/mobileViewport'
+import { isPhonePortrait } from '../input/mobileViewport'
 import { RESIDENTS } from '../maps/residents'
 import { INTERIORS } from '../maps/locations'
 import { drawNeighborhoodArt } from '../maps/NeighborhoodArt'
-import { applyStarterAppearance, challengerAsset } from '../team/teamColors'
-import { ApiError, DuelCommand, request, stadiumApi, teamApi, type DuelResponse, type RosterPlayer } from '../../api/gameApi'
+import { challengerAsset, DEFAULT_TEAM_COLORS, starterUniformUrl, addWalkingTexture } from '../team/teamColors'
+import { welcomeCoach } from '../ui/WelcomeCoach'
+import { trackLocation, type SavedLocation } from '../save/location'
+import type { Profile } from '../../api/gameApi'
+import { ApiError, DuelCommand, stadiumApi, teamApi, type DuelResponse, type RosterPlayer, type ReleasedPlayer } from '../../api/gameApi'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 
 import { PlayerWalkAnimation } from '../entities/PlayerWalkAnimation'
 import { movementVelocity } from '../input/movement'
-import { ApproachDialogue, canDetectChallenger, canInteract, CHALLENGER, CHALLENGERS, type Facing } from '../maps/interactions'
+import { ApproachDialogue, canDetectChallenger, canInteract, CHALLENGER, CHALLENGERS, CHALLENGER_DETECTION_RADIUS, type Facing } from '../maps/interactions'
 import { PlayerCards } from '../ui/PlayerCards'
 import { afterDuelDialogue } from '../maps/challengerDialogue'
+import { ChallengerPatrol, patrolEndpoint } from '../maps/ChallengerPatrol'
 import { WorldHud } from '../ui/WorldHud'
+import { WorldMinimap } from '../ui/WorldMinimap'
+import { touchesDoor, outsideDoor } from '../maps/doors'
+import { GuidedWalk, walkingRoute } from '../maps/walkingRoute'
 
 export class WorldScene extends Phaser.Scene {
   player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
@@ -22,10 +30,17 @@ export class WorldScene extends Phaser.Scene {
   private stadiumPoint!: { x: number; y: number }
   private stadiumEntry!: Phaser.GameObjects.Text
   private stadiumId?: string
+  private minimap!: WorldMinimap
+  private guide?: { walk: GuidedWalk; leader: GuidedWalk; mentor: Phaser.GameObjects.Sprite; arrived: () => void }
   private doors: { key: string; x: number; y: number }[] = []
-  private appearanceId?: string
+  private startData: { onboarding?: boolean; name?: string; profile?: Profile; location?: SavedLocation } = {}
   private activeChallenger = CHALLENGER
-  private npcs: { content: typeof CHALLENGER | typeof RESIDENTS[number]; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody; approach: ApproachDialogue; moving: boolean; facing: Facing }[] = []
+  private npcs: { content: typeof CHALLENGER | typeof RESIDENTS[number]; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody; approach: ApproachDialogue; moving: boolean; facing: Facing; patrol?: ChallengerPatrol; walk: PlayerWalkAnimation }[] = []
+  private obstacles!: Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer
+  private mapSize!: { width: number; height: number }
+  private released: ReleasedPlayer[] = []
+  private roster: RosterPlayer[] = []
+  private releasedNpcs: typeof this.npcs = []
   private encounterLocked = false
   private choosing = false
   private readonly duelCommand = new DuelCommand()
@@ -38,7 +53,13 @@ export class WorldScene extends Phaser.Scene {
     super('WorldScene')
   }
 
+  init(data: typeof this.startData = {}): void { this.startData = data }
+
   create(): void {
+    const restoreMusic = () => gameAudio.setMusic('city')
+    restoreMusic()
+    this.events.on(Phaser.Scenes.Events.WAKE, restoreMusic)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.WAKE, restoreMusic))
     const map = this.make.tilemap({ key: 'benfica' })
     const tiles = map.addTilesetImage('neighborhood', 'neighborhood-tiles')
     if (!tiles) throw new Error('Missing neighborhood tileset')
@@ -46,6 +67,8 @@ export class WorldScene extends Phaser.Scene {
     const obstacles = map.createLayer('collisions', tiles)
     if (!obstacles) throw new Error('Missing collisions layer')
     obstacles.setCollisionByProperty({ collides: true })
+    this.obstacles = obstacles
+    this.mapSize = { width: map.widthInPixels, height: map.heightInPixels }
 
     for (const house of map.getObjectLayer('houses')?.objects ?? []) {
       this.add.image(house.x!, house.y!, 'house').setOrigin(0)
@@ -55,7 +78,7 @@ export class WorldScene extends Phaser.Scene {
     this.doors = INTERIORS.map(location => {
       const point = this.getMapPoint(map, 'interactions', location.key)
       this.add.rectangle(point.x, point.y - 12, 28, 8, 0xf7d154).setDepth(2)
-      this.add.text(point.x, point.y + 10, isPhone() ? 'ENTRAR' : 'ENTRAR · E', {
+      this.add.text(point.x, point.y + 10, 'ENTRAR', {
         fontFamily: 'monospace', fontSize: '11px', color: '#f7d154', backgroundColor: '#152b32',
       }).setOrigin(0.5).setDepth(3)
       return { key: location.key, ...point }
@@ -63,29 +86,39 @@ export class WorldScene extends Phaser.Scene {
 
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels)
     const spawn = this.getMapPoint(map, 'spawns', 'benfica.entry')
-    this.player = this.physics.add.sprite(spawn.x, spawn.y, 'team-player', 'front-0')
+    this.player = this.physics.add.sprite(this.startData.onboarding ? 464 : this.startData.location?.worldX ?? spawn.x,
+      this.startData.onboarding ? 400 : this.startData.location?.worldY ?? spawn.y, 'coach', 'front-0')
       .setSize(18, 14).setOffset(7, 26).setCollideWorldBounds(true)
     this.walkAnimation = new PlayerWalkAnimation(this.player)
     this.physics.add.collider(this.player, obstacles)
+    this.released = []
+    this.roster = []
+    this.releasedNpcs = []
     this.npcs = [...CHALLENGERS, ...RESIDENTS].map((content, index) => {
       const target = this.getMapPoint(map, 'interactions', content.spawnKey)
       const challengerTexture = content.kind === 'challenger' ? challengerAsset(content.playerDefinitionId) : 'challenger'
-      const sprite = this.physics.add.staticImage(target.x, target.y, content.kind === 'resident' ? content.sprite : challengerTexture)
+      const sprite = this.physics.add.staticImage(target.x, target.y, content.kind === 'resident' ? content.sprite : `walking-${challengerTexture}`,
+        content.kind === 'resident' ? undefined : 'front-0')
       sprite.body.setSize(18, 14).setOffset(7, 26)
       sprite.setDepth(sprite.y)
-      this.tweens.add({ targets: sprite, y: target.y - 2, duration: 650 + index * 90, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+      if (content.kind === 'resident') {
+        this.tweens.add({ targets: sprite, y: target.y - 2, duration: 650 + index * 90, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+      }
       this.physics.add.collider(this.player, sprite)
       const visible = content.kind === 'resident'
       sprite.setVisible(visible).setActive(visible)
       sprite.body.enable = visible
-      return { content, sprite, approach: new ApproachDialogue(), moving: false,
+      return { content, sprite, walk: new PlayerWalkAnimation(sprite), approach: new ApproachDialogue(), moving: false,
         facing: content.kind === 'challenger' ? content.facing : 'down' }
     })
+    for (const [index, npc] of this.npcs.entries()) {
+      if (npc.content.kind === 'challenger') npc.patrol = this.createPatrol(npc, index)
+    }
     this.challenger = this.npcs[0]!.sprite
     this.activeChallenger = CHALLENGER
 
     this.stadiumPoint = this.getMapPoint(map, 'interactions', 'benfica.stadium.entry')
-    this.stadiumEntry = this.add.text(this.stadiumPoint.x, this.stadiumPoint.y - 56, 'ESTÁDIO · E / Enter', {
+    this.stadiumEntry = this.add.text(this.stadiumPoint.x, this.stadiumPoint.y - 56, 'ESTÁDIO · ENTRADA', {
       fontFamily: 'monospace', fontSize: '16px', color: '#f7d154', backgroundColor: '#152b32', padding: { x: 8, y: 8 },
     }).setOrigin(0.5).setDepth(900).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openStadium())
     const refreshStadium = () => {
@@ -94,8 +127,8 @@ export class WorldScene extends Phaser.Scene {
         const stadium = stadiums.find(s => s.spawnKey === 'benfica.stadium.entry' && s.mapId === 'benfica')
         this.hud.setCompleted(stadium?.status === 'COMPLETED')
         this.stadiumId = stadium?.id
-        this.stadiumEntry.setText(stadium?.status === 'COMPLETED' ? 'ESTÁDIO · CONQUISTADO' : 'ESTÁDIO · E / Enter')
-      }).catch(() => { this.stadiumEntry.setText('ESTÁDIO · E / Enter') })
+        this.stadiumEntry.setText(stadium?.status === 'COMPLETED' ? 'ESTÁDIO · CONQUISTADO' : 'ESTÁDIO · ENTRADA')
+      }).catch(() => { this.stadiumEntry.setText('ESTÁDIO · ENTRADA') })
     }
     refreshStadium()
     this.events.on(Phaser.Scenes.Events.WAKE, refreshStadium)
@@ -119,8 +152,10 @@ export class WorldScene extends Phaser.Scene {
     this.cursors = keyboard.createCursorKeys()
     this.keys = keyboard.addKeys('W,A,S,D,E,T,ENTER,ESC') as typeof this.keys
     this.choosing = false
+    this.guide = undefined
     this.encounterLocked = false
     this.hud = new WorldHud(this, () => { void this.choosePlayer() })
+    this.minimap = new WorldMinimap(this, map)
     this.touch = new TouchControls(this, () => {
       if (this.player.body) this.player.setVelocity(0, 0)
       keyboard.resetKeys()
@@ -128,6 +163,7 @@ export class WorldScene extends Phaser.Scene {
     })
     const team = button(document.getElementById('game')!, 'Equipe · T', () => this.openTeam())
     team.className = 'world-team-button'
+    team.hidden = Boolean(this.startData.onboarding)
     const hideTeam = () => { team.hidden = true }
     const showTeam = () => { team.hidden = false; keyboard.resetKeys() }
     this.events.on(Phaser.Scenes.Events.SLEEP, hideTeam)
@@ -138,24 +174,25 @@ export class WorldScene extends Phaser.Scene {
       this.events.off(Phaser.Scenes.Events.WAKE, showTeam)
     })
     const updateRoster = (roster: RosterPlayer[]) => {
+      this.roster = roster
       this.hud.setRoster(roster)
-      const starter = roster.find(player => player.playerDefinitionId.startsWith('starter_'))
-      if (starter && starter.playerDefinitionId !== this.appearanceId) {
-        this.appearanceId = starter.playerDefinitionId
-        void applyStarterAppearance(this, starter.playerDefinitionId).then(key => {
-          if (this.player.active) this.player.setTexture(key, 'front-0')
-        }).catch(() => { this.appearanceId = undefined })
-      }
       const owned = new Set(roster.map(player => player.playerDefinitionId))
       for (const npc of this.npcs) {
         if (npc.content.kind !== 'challenger') continue
-        const visible = !owned.has(npc.content.playerDefinitionId)
+        const definitionId = npc.content.playerDefinitionId
+        const visible = !owned.has(definitionId) &&
+          (this.releasedNpcs.includes(npc) || !this.released.some(player => player.playerDefinitionId === definitionId))
         npc.sprite.setVisible(visible).setActive(visible)
         npc.sprite.body.enable = visible && !npc.moving
         if (!visible && npc.content.id === this.activeChallenger.id) this.hud.closeDialogue()
       }
     }
+    const updateReleased = (released: ReleasedPlayer[]) => {
+      void this.setReleasedPlayers(released).then(() => updateRoster(this.roster))
+    }
+    this.events.on('released-updated', updateReleased)
     this.events.on('roster-updated', updateRoster)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off('released-updated', updateReleased))
     const showAfterDuel = (outcome: DuelResponse['match']['outcome'], opponentName: string) => {
       keyboard.resetKeys()
       if (this.npcs.some(npc => npc.content === this.activeChallenger && npc.sprite.active)) {
@@ -166,7 +203,9 @@ export class WorldScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off('duel-finished', showAfterDuel))
     const loadRoster = async () => {
       try {
-        const roster = await request<RosterPlayer[]>('/roster')
+        const [roster, released] = await Promise.all([teamApi.roster(), teamApi.released()])
+        if (!this.scene.isActive()) return
+        await this.setReleasedPlayers(released)
         if (this.scene.isActive()) updateRoster(roster)
       } catch {
         if (!this.scene.isActive()) return
@@ -175,9 +214,33 @@ export class WorldScene extends Phaser.Scene {
         button(panel, 'Tentar novamente', () => { panel.dispose(); void loadRoster() })
       }
     }
-    void loadRoster()
+    this.events.on(Phaser.Scenes.Events.WAKE, loadRoster)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.WAKE, loadRoster))
+    if (this.startData.onboarding) {
+      this.choosing = true
+      welcomeCoach(this, this.player, this.startData.name ?? 'Treinador', this.startData.profile, () => {
+        this.choosing = false
+        this.startData.onboarding = false
+        team.hidden = false
+        void loadRoster()
+        refreshStadium()
+      }, (mentor, arrived) => this.guideToTraining(mentor, arrived), () => this.enterInterior('benfica.gym.entry'))
+    } else void loadRoster()
+    trackLocation(this, () => ({ worldX: this.player.x, worldY: this.player.y }))
+    const resume = this.startData.location?.interior
+    if (resume) {
+      // Restoring an interior takes precedence over automatically touching its exterior door.
+      this.choosing = true
+      this.events.once(Phaser.Scenes.Events.WAKE, () => { this.choosing = false })
+      this.time.delayedCall(0, () => {
+        this.scene.sleep()
+        this.scene.run('InteriorScene', { key: resume.key, resume })
+      })
+    }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off('roster-updated', updateRoster))
-    const animateWalk = (_time: number, delta: number) => this.walkAnimation.update(this.hud.isDialogueOpen, delta)
+    const animateWalk = (_time: number, delta: number) => {
+      if (!this.guide) this.walkAnimation.update(this.hud.isDialogueOpen, delta)
+    }
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, animateWalk)
 
     const stopMovement = () => {
@@ -192,8 +255,35 @@ export class WorldScene extends Phaser.Scene {
     })
   }
 
-  update(): void {
-    if (this.choosing || isPhonePortrait() || document.getElementById('game')!.querySelector('.scene-panel')) {
+  update(_time: number, delta: number): void {
+    this.minimap.update(this.player.body.center, !isPhonePortrait() && !this.hud.isDialogueOpen &&
+      !document.getElementById('game')!.querySelector('.scene-panel:not([hidden])'))
+    if (this.guide) {
+      this.touch.setContext({ visible: false })
+      this.player.setVelocity(0, 0)
+      if (isPhonePortrait()) return
+      const { walk, leader, mentor, arrived } = this.guide
+      walk.step(delta)
+      leader.step(delta)
+      this.player.body.reset(walk.position.x, walk.position.y)
+      this.walkAnimation.update(false, delta, true)
+      this.player.setDepth(this.player.y)
+      // Miguel follows the same safe route a short distance ahead of the trainer.
+      mentor.setPosition(leader.position.x, leader.position.y).setDepth(leader.position.y)
+      mentor.setData('walking', !leader.finished)
+      if (walk.finished) {
+        this.guide = undefined
+        this.walkAnimation.stop()
+        mentor.setPosition(this.player.x + 38, this.player.y).setDepth(this.player.y).setData('walking', false)
+        const mentorWalk = mentor.getData('walkAnimation') as PlayerWalkAnimation
+        mentorWalk.face(this.facingToward(mentor, this.player))
+        arrived()
+      }
+      return
+    }
+    const blocked = this.choosing || isPhonePortrait() || Boolean(document.getElementById('game')!.querySelector('.scene-panel'))
+    this.updatePatrols(delta, blocked || this.encounterLocked || this.hud.isDialogueOpen)
+    if (blocked) {
       this.touch.setContext({ visible: false })
       this.player.setVelocity(0, 0)
       return
@@ -201,6 +291,12 @@ export class WorldScene extends Phaser.Scene {
     if (this.encounterLocked) {
       this.touch.setContext({ visible: true, movement: false })
       this.player.setVelocity(0, 0)
+      return
+    }
+    const touching = !this.hud.isDialogueOpen && this.doors.find(door => touchesDoor(this.player.body, door))
+    if (touching) {
+      if (touching.key === 'benfica.stadium.entry') this.openStadium()
+      else this.enterInterior(touching.key)
       return
     }
     const nearStadium = canInteract(this.player.body.center, this.stadiumPoint)
@@ -223,7 +319,7 @@ export class WorldScene extends Phaser.Scene {
     const back = this.touch.input.consume('back')
     const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC) || back
     for (const npc of this.npcs) {
-      if (npc.content.kind === 'challenger' && npc.sprite.active && !this.encounterLocked &&
+      if (npc.content.kind === 'challenger' && npc.sprite.active && !this.encounterLocked && !this.hud.isDialogueOpen &&
           npc.approach.update(this.player.body.center, npc.sprite.body.center)) {
         this.beginChallengerApproach(npc)
         return
@@ -252,7 +348,111 @@ export class WorldScene extends Phaser.Scene {
     this.hud.showPrompt(nearby || Boolean(nearbyDoor) || nearStadium, nearbyDoor || nearStadium ? 'Entrar' : 'Conversar')
   }
 
+  returnFromInterior(key: string): void {
+    const door = this.doors.find(place => place.key === key)
+    if (door) {
+      const outside = outsideDoor(key, door)
+      this.player.body.reset(outside.x, outside.y)
+    }
+    this.player.setVelocity(0, 0)
+    this.walkAnimation.stop()
+    this.touch.reset()
+    this.input.keyboard?.resetKeys()
+  }
+
+  private guideToTraining(mentor: Phaser.GameObjects.Sprite, arrived: () => void): boolean {
+    const door = this.doors.find(place => place.key === 'benfica.gym.entry')!
+    const destination = { x: door.x, y: door.y + 64 }
+    const route = walkingRoute(this.player, destination, this.mapSize.width, this.mapSize.height, point =>
+      this.isPatrolSpace(point) && !this.npcs.some(npc => npc.sprite.active &&
+        Math.abs(npc.sprite.x - point.x) < 28 && Math.abs(npc.sprite.y - point.y) < 22))
+    if (!route.length) return false
+    this.input.keyboard?.resetKeys()
+    this.touch.reset()
+    const leader = new GuidedWalk(route)
+    for (let step = 0; step < 4; step++) leader.step(50)
+    this.guide = { walk: new GuidedWalk(route), leader, mentor, arrived }
+    return true
+  }
+
+  private isPatrolSpace(point: { x: number; y: number }): boolean {
+    // The collision body covers the feet: 18×14, offset (7, 26) in a 32×40 sprite.
+    for (const x of [point.x - 9, point.x + 9 - 0.001]) {
+      for (const y of [point.y + 6, point.y + 20 - 0.001]) {
+        if (x < 0 || y < 0 || x >= this.mapSize.width || y >= this.mapSize.height ||
+            this.obstacles.getTileAtWorldXY(x, y)?.collides) return false
+      }
+    }
+    return true
+  }
+
+  private createPatrol(npc: typeof this.npcs[number], index: number): ChallengerPatrol {
+    const origin = { x: npc.sprite.x, y: npc.sprite.y }
+    return new ChallengerPatrol(origin, patrolEndpoint(origin, index, point => this.isPatrolSpace(point)), index)
+  }
+
+  private updatePatrols(delta: number, paused: boolean): void {
+    for (const npc of this.npcs) {
+      if (!npc.patrol || !npc.sprite.active || npc.moving) continue
+      // Keep a greeted NPC still until the trainer leaves the encounter area.
+      const nearby = Math.hypot(this.player.body.center.x - npc.sprite.body.center.x,
+        this.player.body.center.y - npc.sprite.body.center.y) <= CHALLENGER_DETECTION_RADIUS + 20
+      npc.patrol.update(delta, paused || nearby, point => this.isPatrolSpace(point) &&
+        !this.npcs.some(other => other !== npc && other.sprite.active &&
+          Math.abs(other.sprite.x - point.x) < 22 && Math.abs(other.sprite.y - point.y) < 18))
+      const point = npc.patrol.position
+      npc.sprite.body.reset(point.x, point.y)
+      npc.walk.update(!npc.patrol.walking, delta, npc.patrol.walking)
+      npc.sprite.setDepth(point.y)
+      if (npc.patrol.walking) {
+        npc.facing = npc.patrol.facing
+        npc.sprite.setData('facing', npc.facing)
+      }
+    }
+  }
+
+  private async setReleasedPlayers(released: ReleasedPlayer[]): Promise<void> {
+    this.released = released
+    for (const player of released) {
+      if (player.playerDefinitionId.startsWith('starter_')) {
+        const key = `released-${player.playerDefinitionId}`
+        if (!this.textures.exists(key)) await addWalkingTexture(this, key, starterUniformUrl(player.playerDefinitionId, DEFAULT_TEAM_COLORS))
+      }
+    }
+    if (!this.scene.isActive() && !this.scene.isSleeping()) return
+    // Keep existing sprites when location is unchanged, preserving approach state.
+    for (const npc of [...this.releasedNpcs]) {
+      const player = released.find(p => npc.content.kind === 'challenger' && p.id === npc.content.id)
+      if (player && npc.sprite.getData('spawnX') === player.x && npc.sprite.getData('spawnY') === player.y) continue
+      this.tweens.killTweensOf(npc.sprite)
+      npc.sprite.destroy()
+      this.npcs = this.npcs.filter(item => item !== npc)
+      this.releasedNpcs = this.releasedNpcs.filter(item => item !== npc)
+    }
+    for (const player of released) {
+      if (this.releasedNpcs.some(npc => npc.content.kind === 'challenger' && npc.content.id === player.id)) continue
+      const starter = player.playerDefinitionId.startsWith('starter_')
+      const sprite = this.physics.add.staticImage(player.x, player.y,
+        starter ? `released-${player.playerDefinitionId}` : `walking-${challengerAsset(player.playerDefinitionId)}`, 'front-0')
+      sprite.setData('spawnX', player.x).setData('spawnY', player.y)
+      sprite.body.setSize(18, 14).setOffset(7, 26)
+      sprite.setDepth(player.y)
+      this.physics.add.collider(this.player, sprite)
+      const npc: typeof this.npcs[number] = {
+        content: { ...player, kind: 'challenger', spawnKey: `released.${player.id}`, facing: 'down',
+          dialogue: `Agora estou treinando por aqui. Podemos jogar um desafio ou você pode me convidar novamente pela Equipe.` },
+        sprite, walk: new PlayerWalkAnimation(sprite), approach: new ApproachDialogue(), moving: false, facing: 'down',
+      }
+      // The trainer can walk away before this newly released NPC notices them.
+      npc.approach.update(this.player.body.center, sprite.body.center)
+      this.releasedNpcs.push(npc)
+      this.npcs.push(npc)
+      npc.patrol = this.createPatrol(npc, this.npcs.length - 1)
+    }
+  }
+
   private beginChallengerApproach(npc: typeof this.npcs[number]): void {
+    gameAudio.play('attention')
     this.encounterLocked = true
     this.touch.reset()
     npc.moving = true
@@ -276,20 +476,21 @@ export class WorldScene extends Phaser.Scene {
       onComplete: () => alert.destroy() })
     this.tweens.add({ targets: npc.sprite, x: targetX, y: targetY,
       duration: 850, ease: 'Linear',
-      onUpdate: tween => {
-        // Small alternating steps keep the upright placeholder visibly walking.
-        npc.sprite.y -= Math.round(2 * Math.abs(Math.sin(tween.progress * Math.PI * 6)))
+      onUpdate: () => {
+        npc.walk.update(false, this.game.loop.delta, true)
         npc.sprite.setDepth(npc.sprite.y)
       },
       onComplete: () => {
         if (!this.scene.isActive() || !npc.sprite.active) return
         npc.sprite.setPosition(targetX, targetY)
-        npc.sprite.refreshBody()
+        npc.sprite.body.reset(targetX, targetY)
         npc.sprite.body.enable = true
         npc.sprite.setDepth(npc.sprite.y)
         npc.moving = false
         npc.facing = this.facingToward(npc.sprite, this.player)
-        this.faceSprite(npc.sprite, npc.facing)
+        npc.walk.face(npc.facing)
+        npc.sprite.setData('facing', npc.facing)
+        npc.patrol = this.createPatrol(npc, this.npcs.indexOf(npc))
         this.facePlayer(this.facingToward(this.player, npc.sprite))
         this.encounterLocked = false
         this.input.keyboard!.resetKeys()
@@ -302,11 +503,6 @@ export class WorldScene extends Phaser.Scene {
     const dx = to.x - from.x
     const dy = to.y - from.y
     return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down')
-  }
-
-  private faceSprite(sprite: Phaser.GameObjects.Image, facing: Facing): void {
-    sprite.setData('facing', facing)
-    sprite.setFlipX(facing === 'left')
   }
 
   private facePlayer(facing: Facing): void {
@@ -327,7 +523,8 @@ export class WorldScene extends Phaser.Scene {
     const challenger = this.activeChallenger
     const panel = scenePanel(this, `Desafiar ${challenger.name}`)
     panel.classList.add('player-selection-panel', 'duel-selection-panel')
-    const close = () => {
+    const close = (keepMusic = false) => {
+      if (!keepMusic) gameAudio.setMusic('city')
       panel.dispose()
       restoreCapture()
       this.events.off(Phaser.Scenes.Events.SHUTDOWN, restoreCapture)
@@ -350,7 +547,7 @@ export class WorldScene extends Phaser.Scene {
         paragraph(panel, `Adversário: ${opponent.name} · Nv. ${opponent.level}. Escolha seu jogador.`).className = 'selection-description'
         const cards = new PlayerCards(roster)
         panel.append(cards.element)
-        paragraph(panel, 'Revanches e adversários de nível inferior rendem menos XP.').className = 'selection-hint'
+        paragraph(panel, 'Duelo: +18 de cansaço. Revanches rendem menos XP.').className = 'selection-hint'
         const status = paragraph(panel, '')
         status.className = 'selection-status'
         const actions = document.createElement('div')
@@ -364,11 +561,14 @@ export class WorldScene extends Phaser.Scene {
           cancel.disabled = true
           cards.disabled = true
           status.textContent = 'Simulando duelo…'
+          gameAudio.setMusic('duel')
           void this.duelCommand.play(challenger.id, selectedId).then(result => {
             if (!this.scene.isActive()) return
-            close()
+            close(true)
             this.transitionToMatch(result)
           }).catch((error: unknown) => {
+            if (!this.scene.isActive()) return
+            gameAudio.setMusic('city')
             if (error instanceof ApiError && error.rejected) {
               status.textContent = error.code === 'PROFILE_NOT_FOUND'
                 ? 'Sua sessão expirou. Recarregue a página para começar novamente.'
@@ -381,7 +581,8 @@ export class WorldScene extends Phaser.Scene {
             start.disabled = false
           })
         })
-        start.disabled = !roster.length
+        start.disabled = !cards.selectedId
+        cards.element.addEventListener('fatigue-updated', () => { if (!cards.element.disabled) start.disabled = !cards.selectedId })
       } catch {
         panel.replaceChildren()
         paragraph(panel, 'Não foi possível carregar o elenco.')

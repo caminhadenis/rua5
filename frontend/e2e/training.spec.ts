@@ -1,9 +1,11 @@
+import { continueGame } from './helpers/opening'
 import { expect, test } from '@playwright/test'
 
-test('enter the training center, choose a sector and complete one five second drill', async ({ page }, testInfo) => {
+test('enter the training center, choose a sector and repeat drills immediately without duplicating a confirmed session', async ({ page }, testInfo) => {
   expect((await page.request.post('/api/v1/profiles', { data: { displayName: 'Treinador' } })).status()).toBe(201)
   expect((await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })).ok()).toBe(true)
   await page.goto('/')
+  await continueGame(page)
   await expect(page.locator('canvas')).toBeVisible()
   await expect.poll(() => page.evaluate(async () => {
     const { game } = await import('/src/main.ts')
@@ -73,11 +75,37 @@ test('enter the training center, choose a sector and complete one five second dr
   expect(roster[0].stats.dribbling).toBe(before.stats.dribbling + 0.25)
   expect(roster[0].stats.finishing).toBe(before.stats.finishing)
   await expect(stage.locator('.training-progress')).toContainText(`${(before.stats.dribbling + 0.25).toLocaleString('pt-BR')}/99 · +0,25 por treino`)
+  await expect(panel.getByRole('button', { name: 'Treinar novamente' })).toBeEnabled()
+  let secondSessionCount = 0
+  let loseRosterRefresh = false
+  await page.route('**/api/v1/training/sessions', async route => {
+    const response = await route.fetch()
+    secondSessionCount++
+    loseRosterRefresh = true
+    await route.fulfill({ response })
+  })
+  await page.route('**/api/v1/roster', async route => {
+    if (loseRosterRefresh) {
+      loseRosterRefresh = false
+      await route.abort('failed')
+    } else await route.continue()
+  })
+  await panel.getByRole('button', { name: 'Treinar novamente' }).click()
+  await expect(panel.getByRole('button', { name: 'Tentar novamente', exact: true })).toBeVisible({ timeout: 12_000 })
+  await panel.getByRole('button', { name: 'Tentar novamente', exact: true }).click()
+  await expect(panel.getByRole('status')).toContainText(`${(before.stats.dribbling + 0.25).toLocaleString('pt-BR')} → ${(before.stats.dribbling + 0.5).toLocaleString('pt-BR')}`)
+  expect(secondSessionCount).toBe(1)
+  const repeated = (await (await page.request.get('/api/v1/roster')).json())[0]
+  expect(repeated.stats.dribbling).toBe(before.stats.dribbling + 0.5)
+  expect(repeated.fatigue.value).toBeGreaterThan(20)
+  expect(repeated.fatigue.value).toBeLessThanOrEqual(24)
+  await expect(panel.getByRole('button', { name: 'Treinar novamente' })).toBeEnabled()
   await panel.getByRole('button', { name: 'Voltar ao centro' }).click()
   await openSector('DRIBBLING')
-  await expect(panel.getByText(/Próximo treino para Cabeleira em/)).toBeVisible()
-  await expect(stage.locator('.training-progress')).toContainText(`${(before.stats.dribbling + 0.25).toLocaleString('pt-BR')}/99 · +0,25 por treino`)
-  await expect(panel.getByRole('button', { name: 'Começar treino' })).toBeDisabled()
+  await expect(panel.getByText(/Próximo treino para Cabeleira em/)).toHaveCount(0)
+  await expect(stage.locator('.training-progress')).toContainText(`${(before.stats.dribbling + 0.5).toLocaleString('pt-BR')}/99 · +0,25 por treino`)
+  await expect(panel.getByRole('button', { name: 'Começar treino' })).toBeEnabled()
   await page.reload()
-  expect((await (await page.request.get('/api/v1/roster')).json())[0].stats.dribbling).toBe(before.stats.dribbling + 0.25)
+  await continueGame(page)
+  expect((await (await page.request.get('/api/v1/roster')).json())[0].stats.dribbling).toBe(before.stats.dribbling + 0.5)
 })

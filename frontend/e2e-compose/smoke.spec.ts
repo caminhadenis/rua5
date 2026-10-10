@@ -1,3 +1,5 @@
+import { startOpening, continueGame, finishStarterGuidance } from '../e2e/helpers/opening'
+import { persistentRoster } from '../e2e/helpers/roster'
 import { expect, test } from '@playwright/test'
 import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
 
@@ -6,9 +8,10 @@ test('compiled client → same-origin API/session → real duel → persisted re
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
-  await page.getByRole('button', { name: 'Começar', exact: true }).click()
+  await startOpening(page)
   await page.getByRole('button', { name: 'Confirmar cores', exact: true }).click()
   await page.getByRole('button', { name: 'Escolher Aderlou' }).click()
+  await finishStarterGuidance(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   await expect(page.locator('canvas')).toBeVisible()
   // Walk until the approach dialogue pauses the player. No development-only scene hooks.
@@ -27,7 +30,8 @@ test('compiled client → same-origin API/session → real duel → persisted re
   expect(roster[0]!.xp).toBe(result.rewards!.currentXp)
   expect(roster[0]!.wins + roster[0]!.draws + roster[0]!.losses).toBe(1)
   await page.reload()
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
-  expect(await (await page.request.get('/api/v1/roster')).json()).toEqual(roster)
+  expect(persistentRoster(await (await page.request.get('/api/v1/roster')).json())).toEqual(persistentRoster(roster))
   expect(errors).toEqual([])
 })

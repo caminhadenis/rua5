@@ -1,10 +1,10 @@
-export type ResidentSprite = 'resident' | 'resident-elder' | 'resident-student' | 'resident-sport'
+export type ResidentSprite = 'resident' | 'resident-elder' | 'resident-student' | 'resident-sport' | 'resident-physio' | 'resident-masseur' | 'resident-dress' | 'resident-beard' | 'resident-braid' | 'resident-cap' | 'resident-curly'
 export type FurnitureKind = 'sofa' | 'table' | 'shelf' | 'bed' | 'plant' | 'desk' | 'rack' | 'counter'
 type Furniture = { kind: FurnitureKind; x: number; y: number; width: number; height: number }
-type Person = { name: string; dialogue: string; x: number; y: number; sprite: ResidentSprite; role?: 'trainer' | 'stadium-coach' | 'supporter' }
+type Person = { name: string; dialogue: string; x: number; y: number; sprite: ResidentSprite; role?: 'trainer' | 'stadium-coach' | 'supporter' | 'physiotherapist' | 'masseur' }
 
 export interface InteriorLocation {
-  key: string; name: string; kind: 'home' | 'school' | 'gym' | 'apartment' | 'stadium'
+  key: string; name: string; kind: 'university' | 'home' | 'school' | 'gym' | 'apartment' | 'stadium' | 'recovery'
   floorColor: number; wallColor: number; accentColor: number
   pattern: 'wood' | 'tile' | 'mat'; wallLabel: string
   furniture: Furniture[]; people: Person[]
@@ -12,6 +12,33 @@ export interface InteriorLocation {
 
 // Room plans, people and conversations are static content keyed by stable map doors.
 export const INTERIORS: InteriorLocation[] = [
+  {
+    key: 'benfica.recovery.entry', name: 'Centro de Recuperação', kind: 'recovery',
+    floorColor: 0xb6cdc7, wallColor: 0x365962, accentColor: 0x67b5af, pattern: 'tile', wallLabel: 'DESCANSAR TAMBÉM É PREPARAR',
+    furniture: [{ kind: 'counter', x: 165, y: 405, width: 110, height: 38 }],
+    people: [
+      { name: 'Fisioterapeuta Helena', role: 'physiotherapist', sprite: 'resident-physio', x: 325, y: 330,
+        dialogue: 'Bem-vindo ao Centro de Recuperação! Deixe seus atletas nas macas para descansar. No canto, os banhos de gelo ajudam a recuperar o cansaço.' },
+      { name: 'Massagista Vítor', role: 'masseur', sprite: 'resident-masseur', x: 550, y: 330,
+        dialogue: 'Cuidamos dos atletas enquanto você explora o bairro. Aproxime-se de uma maca ou de um balde de gelo para escolher quem vai descansar.' },
+    ],
+  },
+  {
+    key: 'benfica.university.entry', name: 'Universidade Rua 5', kind: 'university',
+    floorColor: 0xbeb493, wallColor: 0x344b52, accentColor: 0x697f72, pattern: 'tile', wallLabel: 'ESCOLA DE FORMAÇÃO DE TREINADORES',
+    furniture: [
+      { kind: 'desk', x: 442, y: 180, width: 72, height: 40 },
+      ...[270, 350, 610, 690].flatMap(x => [290, 360].map(y => ({ kind: 'sofa' as const, x, y, width: 48, height: 28 }))),
+    ],
+    people: [
+      { name: 'Reitor Augusto', sprite: 'resident-elder', x: 510, y: 260,
+        dialogue: 'Parabéns pela formação! Explore as ruas, vença desafiantes e convide-os para o seu time. Leve cinco atletas para desafiar o treinador do estádio.' },
+      { name: 'Formanda Clara', sprite: 'resident-student', x: 275, y: 415,
+        dialogue: 'Estou esperando minha vez de receber o diploma. Quero montar um time com as cores da minha família!' },
+      { name: 'Formando André', sprite: 'resident-sport', x: 685, y: 415,
+        dialogue: 'O reitor ensinou que descansar também faz parte do treino. Boa sorte com seu novo time!' },
+    ],
+  },
   {
     key: 'benfica.stadium.entry', name: 'Estádio do Benfica', kind: 'stadium',
     floorColor: 0x53866a, wallColor: 0x763f41, accentColor: 0xf5ead2, pattern: 'mat', wallLabel: 'CASA DO TIME DE DIMAS',
@@ -21,16 +48,16 @@ export const INTERIORS: InteriorLocation[] = [
         dialogue: 'Bem-vindo! Meus cinco atletas entram um de cada vez. Vença todos no 1 × 1 para levar a taça; perdeu um, recomeça. Enter para escolher seu atleta.' },
       { name: 'Rita da arquibancada', role: 'supporter', sprite: 'resident', x: 180, y: 225,
         dialogue: 'Eu sou do time de Dimas! Vou torcer por cada um dos nossos cinco. Hoje você não leva essa taça!' },
-      { name: 'Beto da torcida', role: 'supporter', sprite: 'resident-sport', x: 310, y: 355,
+      { name: 'Douglas da torcida', role: 'supporter', sprite: 'resident-sport', x: 310, y: 355,
         dialogue: 'Vim com as cores do nosso time! Dimas, estamos com você! Quero ver seu atleta perder já no primeiro duelo.' },
       { name: 'Naná da bandeira', role: 'supporter', sprite: 'resident-student', x: 790, y: 390,
         dialogue: 'Minha bandeira é do time do estádio. Vou gritar contra você em cada chute! Nossos cinco vão defender a taça.' },
-      { name: 'Seu Raul da faixa', role: 'supporter', sprite: 'resident-elder', x: 390, y: 185,
+      { name: 'Seu Osvaldo da faixa', role: 'supporter', sprite: 'resident-elder', x: 390, y: 185,
         dialogue: 'Esta faixa diz tudo: VAMOS, DIMAS! Sou torcedor da casa. Basta um dos nossos vencer para você começar tudo de novo!' },
     ],
   },
   {
-    key: 'benfica.house.01.entry', name: 'Casa da Dona Lia', kind: 'home',
+    key: 'benfica.house.01.entry', name: 'Casa da Dona Amélia', kind: 'home',
     floorColor: 0xc7a77f, wallColor: 0x765941, accentColor: 0xbd745e, pattern: 'wood', wallLabel: 'FOTOS DA QUADRA',
     furniture: [
       { kind: 'shelf', x: 173, y: 180, width: 118, height: 44 },
@@ -39,8 +66,8 @@ export const INTERIORS: InteriorLocation[] = [
       { kind: 'plant', x: 810, y: 360, width: 36, height: 36 },
     ],
     people: [
-      { name: 'Dona Lia', sprite: 'resident-elder', x: 313, y: 300, dialogue: 'Conheci Dimas quando dava aula na escola. Era pontual até nas peladas: apito na mão às seis da manhã. Íris aprendeu com ele a fechar a defesa.' },
-      { name: 'Nina', sprite: 'resident-student', x: 650, y: 340, dialogue: 'Coleciono recortes dos jogos. Cada jogo do estádio é 1 × 1. Quero ver qual atleta você escolhe para enfrentar Ivo!' },
+      { name: 'Dona Amélia', sprite: 'resident-dress', x: 313, y: 300, dialogue: 'Conheci Dimas quando dava aula na escola. Era pontual até nas peladas: apito na mão às seis da manhã. Íris aprendeu com ele a fechar a defesa.' },
+      { name: 'Elisa', sprite: 'resident-braid', x: 650, y: 340, dialogue: 'Coleciono recortes dos jogos. Cada jogo do estádio é 1 × 1. Quero ver qual atleta você escolhe para enfrentar Ivo!' },
     ],
   },
   {
@@ -53,11 +80,11 @@ export const INTERIORS: InteriorLocation[] = [
     ],
     people: [
       { name: 'Seu Otávio', sprite: 'resident-elder', x: 329, y: 341, dialogue: 'Anoto cada placar no rádio. Dimas raramente grita: ele observa os duelos e orienta cada atleta. Tito e Íris marcam muito bem no 1 × 1.' },
-      { name: 'Beto', sprite: 'resident-sport', x: 690, y: 307, dialogue: 'Meu pai fala só da defesa, mas eu gosto do drible do Ivo. Ele é um dos cinco rivais que você enfrenta, um de cada vez.' },
+      { name: 'Hugo', sprite: 'resident-cap', x: 690, y: 307, dialogue: 'Meu pai fala só da defesa, mas eu gosto do drible do Ivo. Ele é um dos cinco rivais que você enfrenta, um de cada vez.' },
     ],
   },
   {
-    key: 'benfica.house.03.entry', name: 'Casa da Mara', kind: 'home',
+    key: 'benfica.house.03.entry', name: 'Casa da Cecília', kind: 'home',
     floorColor: 0xbd8f78, wallColor: 0x744b51, accentColor: 0xdaae73, pattern: 'wood', wallLabel: 'BANDEIRAS DA TORCIDA',
     furniture: [
       { kind: 'desk', x: 202, y: 180, width: 130, height: 58 },
@@ -65,8 +92,8 @@ export const INTERIORS: InteriorLocation[] = [
       { kind: 'plant', x: 805, y: 202, width: 40, height: 40 },
     ],
     people: [
-      { name: 'Mara da rua', sprite: 'resident', x: 318, y: 320, dialogue: 'Meu nome é igual ao da finalizadora do estádio, mas eu torço da arquibancada! Dimas treina cada atleta para o duelo individual. Mara capricha nos chutes.' },
-      { name: 'Ivo da rua', sprite: 'resident-student', x: 710, y: 345, dialogue: 'Também tenho nome de jogador do estádio. O Ivo de lá dribla muito mais que eu. Quero ver alguém acompanhá-lo!' },
+      { name: 'Cecília', sprite: 'resident-curly', x: 318, y: 320, dialogue: 'Eu acompanho os jogos da arquibancada! Dimas treina cada atleta para o duelo individual. Mara capricha nos chutes.' },
+      { name: 'Tomás', sprite: 'resident-cap', x: 710, y: 345, dialogue: 'Gosto de observar o Ivo do estádio. Ele dribla muito bem. Quero ver alguém acompanhá-lo!' },
     ],
   },
   {
@@ -78,7 +105,7 @@ export const INTERIORS: InteriorLocation[] = [
       { kind: 'table', x: 759, y: 190, width: 96, height: 58 },
     ],
     people: [
-      { name: 'Rosa', sprite: 'resident-elder', x: 345, y: 330, dialogue: 'Da minha janela vejo o caminho para o estádio. Dimas passa pelo lago antes de cada jogo; diz que uma volta tranquila ajuda a pensar.' },
+      { name: 'Rosa', sprite: 'resident-dress', x: 345, y: 330, dialogue: 'Da minha janela vejo o caminho para o estádio. Dimas passa pelo lago antes de cada jogo; diz que uma volta tranquila ajuda a pensar.' },
       { name: 'Téo', sprite: 'resident-student', x: 705, y: 300, dialogue: 'Vou torcer perto do portão. Se Zeca entrar no seu time, talvez consiga passar pela marcação do Tito!' },
     ],
   },
@@ -112,8 +139,8 @@ export const INTERIORS: InteriorLocation[] = [
       { kind: 'shelf', x: 797, y: 180, width: 100, height: 68 },
     ],
     people: [
-      { name: 'Seu Raul', sprite: 'resident-elder', x: 355, y: 322, dialogue: 'Da varanda vejo Dimas chegar antes da equipe. Ele abre o portão, mede o campo com os olhos e chama Íris e Tito para aquecer.' },
-      { name: 'Lila', sprite: 'resident-student', x: 687, y: 315, dialogue: 'Quando o estádio acende, dá para ouvir a torcida daqui. Quero ver seu atleta enfrentar os cinco rivais, um de cada vez!' },
+      { name: 'Seu Raul', sprite: 'resident-beard', x: 355, y: 322, dialogue: 'Da varanda vejo Dimas chegar antes da equipe. Ele abre o portão, mede o campo com os olhos e chama Íris e Tito para aquecer.' },
+      { name: 'Lila', sprite: 'resident-curly', x: 687, y: 315, dialogue: 'Quando o estádio acende, dá para ouvir a torcida daqui. Quero ver seu atleta enfrentar os cinco rivais, um de cada vez!' },
     ],
   },
 ]

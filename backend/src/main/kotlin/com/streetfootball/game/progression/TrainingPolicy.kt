@@ -1,22 +1,12 @@
 package com.streetfootball.game.progression
 
 import com.streetfootball.game.match.domain.MatchStats
-import java.time.Duration
-import java.time.Instant
 
 enum class TrainingFocus { SPEED, DRIBBLING, FINISHING, DEFENDING, PHYSICAL }
 
-/** Each drill grants a quarter stat point; each athlete has an independent cooldown. */
+/** Each drill grants a quarter stat point. Fatigue accumulates without a training cooldown. */
 object TrainingPolicy {
     const val STAT_GAIN = 0.25
-    val cooldown: Duration = Duration.ofMinutes(1)
-
-    fun nextAvailableAt(lastTraining: Instant?): Instant? = lastTraining?.plus(cooldown)
-
-    fun canTrain(
-        now: Instant,
-        lastTraining: Instant?,
-    ): Boolean = lastTraining == null || !now.isBefore(lastTraining.plus(cooldown))
 
     fun stat(
         stats: MatchStats,

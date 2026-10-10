@@ -10,6 +10,7 @@ import com.streetfootball.game.match.snapshot
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
 import com.streetfootball.game.progression.DuelRewards
+import com.streetfootball.game.progression.FatiguePolicy
 import com.streetfootball.game.progression.Progression
 import com.streetfootball.game.recruitment.RecruitmentPolicy
 import com.streetfootball.game.recruitment.RecruitmentStatus
@@ -55,22 +56,27 @@ class ChallengeMatchService(
             return it
         }
 
-        val challenger = challengers.findById(challengerId) ?: throw ChallengerNotAvailableException()
+        val challenger = challengers.findForProfile(profileId, challengerId) ?: throw ChallengerNotAvailableException()
         if (!challenger.enabled || (profile.currentMapId != null && profile.currentMapId != challenger.mapId)) {
             throw ChallengerNotAvailableException()
         }
         val owned = ownedPlayers.findById(ownedPlayerId).orElseThrow(::OwnedPlayerNotFoundException)
         if (owned.profileId != profileId) throw PlayerNotOwnedException()
+        if (!owned.rosterActive) throw OwnedPlayerNotFoundException()
         val home = definitions.findById(owned.playerDefinitionId).orElseThrow(::OwnedPlayerNotFoundException)
         val away = definitions.findById(challenger.playerDefinitionId).orElseThrow(::ChallengerNotAvailableException)
         if (!away.enabled) throw ChallengerNotAvailableException()
         if (!home.enabled) throw OwnedPlayerNotFoundException()
 
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        owned.requireAvailable(now)
+        val fatigueBefore = owned.fatigueAt(now)
+        val released = challenger.releasedOwnedPlayerId?.let { ownedPlayers.findById(it).orElseThrow(::ChallengerNotAvailableException) }
         val input =
             MatchRequest(
                 mode = MatchMode.DUEL_1V1,
-                home = listOf(home.snapshot(owned.id.toString(), owned.level, owned)),
-                away = listOf(away.snapshot(challenger.id.toString(), challenger.level)),
+                home = listOf(home.snapshot(owned.id.toString(), owned.level, owned, fatigueBefore)),
+                away = listOf(away.snapshot(challenger.id.toString(), challenger.level, released, released?.fatigueAt(now) ?: 0.0)),
                 seed = seedGenerator.nextLong(),
                 engineVersion = DuelMatchEngine.VERSION,
             )
@@ -94,6 +100,7 @@ class ChallengeMatchService(
                 if (advanced.level < Progression.MAX_LEVEL) Progression.xpForNextLevel(advanced.level) else null,
                 progress,
                 previous.recruitmentStatus == RecruitmentStatus.LOCKED && progress.recruitmentStatus == RecruitmentStatus.AVAILABLE,
+                owned.addFatigue(FatiguePolicy.DUEL_COST, now),
             )
         owned.level = advanced.level
         owned.xp = advanced.xp
@@ -111,7 +118,7 @@ class ChallengeMatchService(
                 result = result,
                 rewards = rewards,
                 // Match PostgreSQL timestamp precision so the first response equals a persisted retry.
-                createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS),
+                createdAt = now,
             )
         progressRepository.save(profileId, challengerId, progress, match.createdAt)
         matches.insert(match)

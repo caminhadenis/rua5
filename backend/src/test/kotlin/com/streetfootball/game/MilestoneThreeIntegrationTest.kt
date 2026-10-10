@@ -127,7 +127,7 @@ class MilestoneThreeIntegrationTest {
             jdbc.queryForObject("SELECT level FROM owned_player", Int::class.java),
         )
         assertEquals(body.path("rewards").path("currentXp").asInt(), jdbc.queryForObject("SELECT xp FROM owned_player", Int::class.java))
-        assertEquals(21, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(25, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
     }
 
     @Test
@@ -365,7 +365,11 @@ class MilestoneThreeIntegrationTest {
                 .get(0)
         assertEquals(2, atLevelTwo.path("level").asInt())
         assertEquals(75, atLevelTwo.path("stats").path("speed").asInt())
-        jdbc.update("UPDATE owned_player SET level = 7, xp = 0 WHERE id = ?", player.ownedId)
+        // Isolate level growth from temporary fatigue accumulated by the two prior duels.
+        jdbc.update(
+            "UPDATE owned_player SET level = 7, xp = 0, fatigue_updated_at = now() - interval '30 minutes' WHERE id = ?",
+            player.ownedId,
+        )
         val next = json.readTree(duel(player).body())
         assertEquals(0, next.path("rewards").path("xpAwarded").asInt())
         assertEquals(

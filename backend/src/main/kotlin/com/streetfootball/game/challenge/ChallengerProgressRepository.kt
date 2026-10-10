@@ -14,6 +14,7 @@ data class ChallengerProgress(
     val draws: Int = 0,
     val losses: Int = 0,
     val recruitmentStatus: RecruitmentStatus = RecruitmentStatus.LOCKED,
+    val recruitmentByDismissal: Boolean = false,
 ) {
     fun record(outcome: MatchOutcome) =
         copy(
@@ -45,6 +46,7 @@ class ChallengerProgressRepository(
                         row.getInt("draws"),
                         row.getInt("losses"),
                         RecruitmentStatus.valueOf(row.getString("recruitment_status")),
+                        row.getBoolean("recruitment_by_dismissal"),
                     )
                 },
                 profileId,
@@ -60,11 +62,11 @@ class ChallengerProgressRepository(
     ) {
         jdbc.update(
             """
-            INSERT INTO challenger_progress (profile_id, challenger_id, attempts, wins, draws, losses, last_played_at, recruitment_status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO challenger_progress (profile_id, challenger_id, attempts, wins, draws, losses, last_played_at, recruitment_status, recruitment_by_dismissal)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (profile_id, challenger_id) DO UPDATE SET
                 attempts = EXCLUDED.attempts, wins = EXCLUDED.wins, draws = EXCLUDED.draws,
-                losses = EXCLUDED.losses, last_played_at = EXCLUDED.last_played_at, recruitment_status = EXCLUDED.recruitment_status
+                losses = EXCLUDED.losses, last_played_at = EXCLUDED.last_played_at, recruitment_status = EXCLUDED.recruitment_status, recruitment_by_dismissal = EXCLUDED.recruitment_by_dismissal
             """.trimIndent(),
             profileId,
             challengerId,
@@ -74,6 +76,7 @@ class ChallengerProgressRepository(
             progress.losses,
             Timestamp.from(now),
             progress.recruitmentStatus.name,
+            progress.recruitmentByDismissal,
         )
     }
 

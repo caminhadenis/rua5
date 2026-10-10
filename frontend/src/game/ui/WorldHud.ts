@@ -91,10 +91,10 @@ export class WorldHud {
   private updateObjective(): void {
     this.objective.setText(this.completed
       ? '★ Taça do Benfica conquistada! Bairro concluído.'
-      : 'Objetivo: prepare seu atleta · Vença 5 duelos seguidos no estádio ↘')
+      : 'Objetivo: reúna 5 jogadores · Vença 5 duelos no estádio ↘')
     this.mobileStatus.textContent = `${this.mobileRoster}\n${this.completed
       ? '★ Taça do Benfica conquistada!'
-      : 'Prepare seu atleta · Vença 5 duelos no estádio ↘'}`
+      : 'Reúna 5 jogadores · Vença 5 duelos no estádio ↘'}`
   }
 
   showPrompt(nearby: boolean, action = 'Conversar'): void {

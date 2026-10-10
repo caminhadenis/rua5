@@ -2,7 +2,6 @@ package com.streetfootball.game.progression
 
 import com.streetfootball.game.match.domain.MatchStats
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -17,14 +16,6 @@ class TrainingPolicyTest {
         assertTrue(TrainingPolicy.canImprove(98.75))
         assertFalse(TrainingPolicy.canImprove(99.0))
         assertEquals(99.0, Progression.effectiveStats(base, 2, StatBonuses(physical = 0.25)).physical)
-    }
-
-    @Test
-    fun `cooldown boundary is inclusive`() {
-        val last = Instant.parse("2026-01-01T00:00:00Z")
-        assertFalse(TrainingPolicy.canTrain(last.plusSeconds(59), last))
-        assertTrue(TrainingPolicy.canTrain(last.plusSeconds(60), last))
-        assertTrue(TrainingPolicy.canTrain(last, null))
     }
 
     @Test

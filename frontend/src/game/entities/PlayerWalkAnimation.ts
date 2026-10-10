@@ -1,4 +1,9 @@
-import type Phaser from 'phaser'
+interface WalkingSprite {
+  x: number; y: number
+  setFrame(frame: string): unknown
+  setFlipX(flip: boolean): unknown
+  body?: { velocity?: { x: number; y: number } } | null
+}
 
 type Facing = 'front' | 'side' | 'back'
 
@@ -12,20 +17,20 @@ export class PlayerWalkAnimation {
   private previousX: number
   private previousY: number
 
-  constructor(private readonly player: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody) {
+  constructor(private readonly player: WalkingSprite) {
     this.previousX = player.x
     this.previousY = player.y
   }
 
   // Called after Arcade Physics has applied movement and resolved collisions.
-  update(paused: boolean, deltaMs: number): void {
+  update(paused: boolean, deltaMs: number, moving = Boolean(this.player.body?.velocity?.x || this.player.body?.velocity?.y)): void {
     const dx = this.player.x - this.previousX
     const dy = this.player.y - this.previousY
     this.previousX = this.player.x
     this.previousY = this.player.y
     const travelled = Math.hypot(dx, dy)
 
-    if (paused || this.player.body.velocity.lengthSq() === 0) {
+    if (paused || !moving) {
       this.stop()
       return
     }

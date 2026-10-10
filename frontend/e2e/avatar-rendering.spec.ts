@@ -1,3 +1,4 @@
+import { continueGame } from './helpers/opening'
 import { expect, test } from '@playwright/test'
 import { writeFile } from 'node:fs/promises'
 
@@ -9,10 +10,11 @@ for (const phone of [false, true]) {
       await page.request.post('/api/v1/profiles', { data: { displayName: 'Avatar', primaryColor: '#2266aa', secondaryColor: '#dd3344' } })
       await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
       await page.goto('/')
+      await continueGame(page)
       await expect.poll(() => page.evaluate(async () => {
         const { game } = await import('/src/main.ts')
         return game.scene.getScene('WorldScene').player?.texture.key
-      })).toBe('team-starter_leo')
+      })).toBe('coach')
       const frames = await page.evaluate(async () => {
         const { game } = await import('/src/main.ts')
         const world = game.scene.getScene('WorldScene')
@@ -39,7 +41,7 @@ for (const phone of [false, true]) {
               }
               return total
             }
-            const colors = [[101, 67, 53], [34, 102, 170], [221, 51, 68], [245, 234, 210]]
+            const colors = [[17, 24, 32], [239, 241, 223], [36, 53, 74], [245, 234, 210]]
             const rendered = colors.map(color => count(context.getImageData(0, 0, 128, 160).data, color))
             context.clearRect(0, 0, 128, 160)
             context.imageSmoothingEnabled = false

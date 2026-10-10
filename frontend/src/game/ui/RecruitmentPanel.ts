@@ -20,6 +20,12 @@ export function recruitmentPanel(parent: HTMLElement, challengerId: string, onRe
         paragraph(section, `${info.name} já faz parte do seu elenco.`)
       } else if (info.recruitmentStatus === 'AVAILABLE' && info.recruitable) {
         paragraph(section, `${info.name}: “Você joga bem! Posso entrar no seu time?”`)
+        if (info.rosterFull) {
+          paragraph(section, 'Time cheio: 5/5 jogadores. Dispense um atleta na Equipe para contratar outro.').setAttribute('role', 'status')
+          const invite = button(section, 'Convidar para o time', () => {})
+          invite.disabled = true
+          return
+        }
         const status = paragraph(section, '')
         status.setAttribute('role', 'status')
         const invite = button(section, 'Convidar para o time', () => {
@@ -34,7 +40,9 @@ export function recruitmentPanel(parent: HTMLElement, challengerId: string, onRe
             paragraph(section, `${info.name} entrou para o seu time!`).setAttribute('role', 'status')
           }).catch((error: unknown) => {
             if (!section.isConnected) return
-            status.textContent = error instanceof ApiError && error.rejected
+            status.textContent = error instanceof ApiError && error.code === 'ROSTER_FULL'
+              ? 'Time cheio: 5/5 jogadores. Dispense um atleta na Equipe para contratar outro.'
+              : error instanceof ApiError && error.rejected
               ? 'O convite não está disponível. Consulte o recrutamento novamente.'
               : 'Não foi possível confirmar o convite. Repetir é seguro.'
             invite.textContent = 'Tentar convite novamente'

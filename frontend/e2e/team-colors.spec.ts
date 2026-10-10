@@ -1,10 +1,11 @@
+import { startOpening, continueGame, finishStarterGuidance } from './helpers/opening'
 import { expect, test } from '@playwright/test'
 
 test('choose team colors before a starter and restore the uniform after reload', async ({ page }, testInfo) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
-  await page.getByRole('button', { name: 'Começar', exact: true }).click()
+  await startOpening(page)
   await expect(page.getByRole('heading', { name: 'Escolha as cores do seu time' })).toBeVisible()
   await expect(page.getByRole('button', { name: /^Escolher / })).toHaveCount(0)
   await page.getByLabel('Cor principal', { exact: true }).fill('#2266aa')
@@ -23,7 +24,10 @@ test('choose team colors before a starter and restore the uniform after reload',
   const profile = await (await page.request.get('/api/v1/profile')).json()
   expect(profile).toMatchObject({ primaryColor: '#2266aa', secondaryColor: '#dd3344', starterSelected: false })
   await page.reload()
+  await continueGame(page)
+  await page.getByRole('button', { name: 'Escolher primeiro jogador' }).click()
   await page.getByRole('button', { name: 'Escolher Cabeleira' }).click()
+  await finishStarterGuidance(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   const uniformPixels = () => page.evaluate(async () => {
     const entry = '/src/main.ts'
@@ -33,12 +37,13 @@ test('choose team colors before a starter and restore the uniform after reload',
     canvas.width = 128; canvas.height = 120
     const context = canvas.getContext('2d')!
     context.drawImage(sprite.texture.getSourceImage(), 0, 0)
-    return [Array.from(context.getImageData(10, 20, 1, 1).data), Array.from(context.getImageData(10, 32, 1, 1).data)]
+    return [Array.from(context.getImageData(10, 20, 1, 1).data), Array.from(context.getImageData(10, 30, 1, 1).data)]
   })
-  expect(await uniformPixels()).toEqual([[34, 102, 170, 255], [221, 51, 68, 255]])
+  expect(await uniformPixels()).toEqual([[239, 241, 223, 255], [36, 53, 74, 255]])
   await page.reload()
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
-  expect(await uniformPixels()).toEqual([[34, 102, 170, 255], [221, 51, 68, 255]])
+  expect(await uniformPixels()).toEqual([[239, 241, 223, 255], [36, 53, 74, 255]])
   await page.getByRole('button', { name: 'Equipe · T' }).click()
   await expect(page.getByRole('radio')).toHaveCount(1)
   expect(decodeURIComponent(await page.locator('.player-card-sprite').evaluate(el => (el as HTMLElement).style.backgroundImage)))

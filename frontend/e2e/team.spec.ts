@@ -1,8 +1,10 @@
+import { continueGame } from './helpers/opening'
 import { expect, test, type Page } from '@playwright/test'
 import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
 
 async function enterWorld(page: Page) {
   await page.goto('/')
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
 }
 
@@ -84,6 +86,7 @@ test('real victory → recruit with lost response → roster → attributes → 
   await expect(page.locator('.player-details')).toContainText(String(nilo.stats.defending))
   await page.screenshot({ path: testInfo.outputPath('team-roster.png') })
   await page.reload()
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   await expectNiloRecruited(page)
   await page.getByRole('button', { name: 'Equipe · T' }).click()

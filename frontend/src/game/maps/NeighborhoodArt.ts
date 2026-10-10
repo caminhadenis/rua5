@@ -1,6 +1,19 @@
 import type Phaser from 'phaser'
 
 export function drawNeighborhoodArt(scene: Phaser.Scene, map: Phaser.Tilemaps.Tilemap): void {
+  scene.add.text(496, 1570, '↓ CENTRO DE RECUPERAÇÃO · TRILHA DO SUL', {
+    fontFamily: 'monospace', fontSize: '14px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 8, y: 4 },
+  }).setOrigin(0.5).setDepth(2)
+  const forest = scene.add.graphics().setDepth(1)
+  for (let y = 1664; y < map.heightInPixels - 64; y += 112) {
+    for (let x = 96; x < map.widthInPixels - 64; x += 128) {
+      if (map.getTileAtWorldXY(x, y, false, undefined, 'collisions')?.index !== 5) continue
+      forest.fillStyle(0x594639).fillRect(x - 5, y, 10, 24)
+      forest.fillStyle(0x244b3b).fillCircle(x, y - 13, 27)
+      forest.fillStyle(0x4a8052).fillCircle(x - 5, y - 19, 21)
+      forest.fillStyle(0x67985c).fillRect(x - 13, y - 29, 12, 4)
+    }
+  }
   const eastCourt = map.getObjectLayer('landmarks')?.objects.find(object => object.name === 'eastCourt')
   if (eastCourt) {
     const { x = 0, y = 0, width = 0, height = 0 } = eastCourt
@@ -55,10 +68,12 @@ export function drawNeighborhoodArt(scene: Phaser.Scene, map: Phaser.Tilemaps.Ti
   }
   for (const building of map.getObjectLayer('buildings')?.objects ?? []) {
     const { x = 0, y = 0, width = 0, height = 0 } = building
-    const school = building.type === 'school'
+    const university = building.type === 'university'
+    const school = building.type === 'school' || university
     const gym = building.type === 'gym'
-    const color = school ? 0xd1b17a : gym ? 0x739c94 : 0xb78374
-    const roof = school ? 0x8a5445 : gym ? 0x315761 : 0x574d65
+    const recovery = building.type === 'recovery'
+    const color = recovery ? 0xd6e7e1 : school ? 0xd1b17a : gym ? 0x739c94 : 0xb78374
+    const roof = recovery ? 0x367e84 : school ? 0x8a5445 : gym ? 0x315761 : 0x574d65
     const art = scene.add.graphics().setDepth(1)
     art.fillStyle(color).fillRect(x, y + 25, width, height - 25)
     art.fillStyle(roof).fillRect(x - 6, y, width + 12, 32)
@@ -70,7 +85,14 @@ export function drawNeighborhoodArt(scene: Phaser.Scene, map: Phaser.Tilemaps.Ti
     }
     art.fillStyle(0x594639).fillRect(x + width / 2 - 18, y + height - 45, 36, 45)
     art.fillStyle(0xf7d154).fillRect(x + width / 2 + 8, y + height - 23, 4, 4)
-    const title = school ? 'ESCOLA' : gym ? 'CENTRO DE TREINO' : 'PRÉDIO'
-    scene.add.text(x + width / 2, y + 7, title, { fontFamily: 'monospace', fontSize: '17px', color: '#fff4ce' }).setOrigin(0.5).setDepth(2)
+    if (recovery) {
+      art.fillStyle(0xf5ead2).fillRect(x + width / 2 - 6, y + 38, 12, 34).fillRect(x + width / 2 - 17, y + 49, 34, 12)
+    }
+    if (university) {
+      art.fillStyle(0x594639).fillRect(x + width / 2 - 18, y, 36, 34)
+      art.fillStyle(0xc2b391).fillRect(x + width / 2 - 24, y - 12, 48, 12)
+    }
+    const title = university ? 'UNIVERSIDADE' : school ? 'ESCOLA' : gym ? 'CENTRO DE TREINO' : recovery ? 'CENTRO DE RECUPERAÇÃO' : 'PRÉDIO'
+    scene.add.text(x + width / 2, y + (recovery ? 19 : 7), title, { fontFamily: 'monospace', fontSize: recovery ? '15px' : '17px', color: '#fff4ce' }).setOrigin(0.5).setDepth(2)
   }
 }

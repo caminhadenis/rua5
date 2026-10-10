@@ -1,3 +1,4 @@
+import { continueGame } from './helpers/opening'
 import { expect, test } from '@playwright/test'
 import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
 import { expectPanelFits } from './helpers/mobilePanel'
@@ -24,6 +25,7 @@ for (const viewport of [{ width: 667, height: 375 }, { width: 568, height: 320 }
         await route.fulfill({ json: { ...result, match: { ...result.match, outcome: 'WIN', homeScore: 2, awayScore: 0 }, rewards: { ...result.rewards, previousLevel: 1, currentLevel: 2, recruitmentUnlocked: true } } })
       })
       await page.goto('/')
+      await continueGame(page)
       const controls = page.getByRole('navigation', { name: 'Controles de toque' })
       await expect(controls).toBeVisible()
       await page.evaluate(async () => {

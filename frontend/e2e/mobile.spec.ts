@@ -1,3 +1,5 @@
+import { recruitStadiumRoster } from './helpers/stadiumRoster'
+import { startOpening, continueGame, finishStarterGuidance } from './helpers/opening'
 import { expect, test, type CDPSession, type Locator, type Page } from '@playwright/test'
 import { expectPanelFits } from './helpers/mobilePanel'
 
@@ -34,6 +36,7 @@ async function touch(cdp: CDPSession, type: 'touchStart' | 'touchMove' | 'touchE
 test('desktop keeps keyboard controls and never shows mobile UI even in a narrow window', async ({ page }) => {
   await createPlayer(page)
   await page.goto('/')
+  await continueGame(page)
   await expect.poll(() => state(page)).not.toBeNull()
   const before = (await state(page))!
   await expect(page.getByRole('navigation', { name: 'Controles de toque' })).toBeHidden()
@@ -60,6 +63,7 @@ test.describe('phone', () => {
     page.on('pageerror', error => errors.push(error.message))
     await createPlayer(page)
     await page.goto('/')
+    await continueGame(page)
     const controls = page.getByRole('navigation', { name: 'Controles de toque' })
     await expect(controls).toBeVisible()
     const cdp = await context.newCDPSession(page)
@@ -117,6 +121,7 @@ test.describe('phone', () => {
   test('portrait asks for rotation and releases held movement before resuming landscape', async ({ page, context }, testInfo) => {
     await createPlayer(page)
     await page.goto('/')
+    await continueGame(page)
     const controls = page.getByRole('navigation', { name: 'Controles de toque' })
     await expect(controls).toBeVisible()
     const cdp = await context.newCDPSession(page)
@@ -141,9 +146,10 @@ test.describe('phone', () => {
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))
     await page.goto('/')
-    await page.getByRole('button', { name: 'Começar', exact: true }).tap()
+    await startOpening(page)
     await page.getByRole('button', { name: 'Confirmar cores' }).tap()
     await page.getByRole('button', { name: 'Escolher Cabeleira' }).tap()
+    await finishStarterGuidance(page)
     const controls = page.getByRole('navigation', { name: 'Controles de toque' })
     await expect(controls).toBeVisible()
     const cdp = await context.newCDPSession(page)
@@ -177,7 +183,9 @@ test.describe('phone', () => {
     page.on('pageerror', error => errors.push(error.message))
     await page.setViewportSize({ width: 568, height: 320 })
     await createPlayer(page)
+    await recruitStadiumRoster(page)
     await page.goto('/')
+    await continueGame(page)
     const controls = page.locator('.touch-controls:visible')
     await expect(controls).toBeVisible()
     // Arrange positions only; every command and scene transition uses the real touch UI.

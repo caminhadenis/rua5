@@ -52,6 +52,19 @@ describe('team uniforms', () => {
     expect(recruitedCora).toContain('fill="#242533"')
     expect(recruitedCora).toContain('fill="#2266aa"')
   })
+  it('adds different silhouettes and preserves their identities when recruited', () => {
+    const assets = ['challenger-bun', 'challenger-cap', 'challenger-beard'] as const
+    expect(new Set(assets.map(asset => uniformSvg(asset, colors))).size).toBe(3)
+    for (const asset of assets) {
+      const uniform = uniformSvg(asset, colors)
+      expect(uniform).toContain(colors.primaryColor)
+      expect(uniform).toContain(colors.secondaryColor)
+    }
+    expect(challengerAsset('npc_bia_01')).toBe('challenger-bun')
+    expect(challengerAsset('npc_rui_01')).toBe('challenger-beard')
+    expect(challengerAsset('npc_sol_01')).toBe('challenger-cap')
+  })
+
   it('preserves colors in both sets of celebration and defeat poses', () => {
     const emotions = uniformSvg('duel-emotions', colors)
     expect(emotions.match(/--shirt:#2266aa/g)).toHaveLength(2)

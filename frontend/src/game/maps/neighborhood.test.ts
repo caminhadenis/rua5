@@ -95,6 +95,29 @@ describe('authored neighborhood', () => {
     }
   })
 
+  it('isolates the recovery center behind a long walkable forest trail from training and the stadium', () => {
+    const recovery = points.find(point => point.properties?.some(property => property.value === 'benfica.recovery.entry'))!
+    expect(recovery.y).toBeGreaterThan(2300)
+    expect(map.layers.find(layer => layer.name === 'buildings')?.objects?.find(object => object.type === 'recovery')).toBeDefined()
+    for (const key of ['benfica.gym.entry', 'benfica.stadium.entry']) {
+      const origin = points.find(point => point.properties?.some(property => property.value === key))!
+      const distance = new Map([[tileIndex(origin), 0]])
+      const queue = [tileIndex(origin)]
+      for (let head = 0; head < queue.length; head++) {
+        const index = queue[head]!
+        const x = index % map.width
+        const y = Math.floor(index / map.width)
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx!, ny = y + dy!, next = ny * map.width + nx
+          if (nx < 0 || nx >= map.width || ny < 0 || ny >= map.height || obstacles[next] !== 0 || distance.has(next)) continue
+          distance.set(next, distance.get(index)! + 1)
+          queue.push(next)
+        }
+      }
+      expect(distance.get(tileIndex(recovery))! * map.tilewidth).toBeGreaterThan(2800)
+    }
+  })
+
   it('places stronger challengers progressively closer to the stadium', () => {
     const stadium = points.find(point => point.properties?.some(property => property.value === 'benfica.stadium.entry'))!
     const distance = (point: MapPoint) => Math.hypot(point.x - stadium.x, point.y - stadium.y)

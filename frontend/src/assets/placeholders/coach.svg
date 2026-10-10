@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="120" viewBox="0 0 128 120" shape-rendering="crispEdges">
+  <!-- Original 32 x 40 frames. Columns: stride, left contact, stride, right contact.
+       Rows: front, right profile (mirrored for left), back. Shadow and collision anchor stay fixed. -->
+  <defs>
+    <g id="front-body">
+      <path fill="#24354a" d="M9 27h15v5H9z"/>
+      <path fill="#a66e49" d="M10 5h13v13H10zM13 15h7v5h-7z"/>
+      <path fill="#111820" d="M9 3h14v5H9zM8 6h4v7H8zM21 6h3v4h-3zM12 10h2v2h-2zM19 10h2v2h-2z"/>
+      <path display="none" d="M12 14h3v1h-3zM17 14h3v1h-3zM15 14h2v2h-2z"/>
+      <path fill="#eff1df" d="M8 18h17v12H8z"/>
+      <path fill="#c5cebf" d="M8 27h17v3H8z"/>
+      <path fill="#24354a" d="M13 18h3v2h-3zM17 18h3v2h-3zM16 20h1v5h-1z"/><path fill="#f7d154" d="M15 24h3v3h-3z"/>
+    </g>
+    <g id="back-body">
+      <path fill="#24354a" d="M9 27h15v5H9z"/>
+      <path fill="#a66e49" d="M9 7h15v10H9zM13 15h7v5h-7z"/>
+      <path fill="#111820" d="M9 3h14v3H9zM8 6h17v8H8zM10 14h13v3H10z"/>
+      <path fill="#eff1df" d="M8 18h17v12H8z"/>
+      <path fill="#c5cebf" d="M8 27h17v3H8zM13 18h7v2h-7z"/>
+    </g>
+    <g id="side-body">
+      <path fill="#24354a" d="M11 27h12v5H11z"/>
+      <path fill="#a66e49" d="M12 5h12v12H12zM23 10h3v4h-3zM14 15h7v5h-7z"/>
+      <path fill="#111820" d="M11 3h12v5H11zM10 6h6v10h-6zM21 9h2v2h-2z"/>
+      <path fill="#eff1df" d="M11 18h12v12H11z"/>
+      <path fill="#c5cebf" d="M11 27h12v3H11z"/>
+      <path fill="#f5ead2" d="M19 18h4v3h-4z"/>
+    </g>
+  </defs>
+  <g transform="translate(0 0)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v9H9zM18 27h6v9h-6z"/>
+    <path fill="#f5ead2" d="M7 34h8v3H7zM18 34h8v3h-8z"/>
+    <g transform="translate(0 -1)">
+      <path fill="#a66e49" d="M4 18h5v11H4zM24 18h5v11h-5z"/>
+      <use href="#front-body"/>
+    </g>
+  </g>
+  <g transform="translate(32 0)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v11H9zM18 27h6v7h-6z"/>
+    <path fill="#f5ead2" d="M7 36h8v3H7zM18 32h8v3h-8z"/>
+    <g transform="translate(0 0)">
+      <path fill="#a66e49" d="M4 16h5v11H4zM24 20h5v11h-5z"/>
+      <use href="#front-body"/>
+    </g>
+  </g>
+  <g transform="translate(64 0)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v9H9zM18 27h6v9h-6z"/>
+    <path fill="#f5ead2" d="M7 34h8v3H7zM18 34h8v3h-8z"/>
+    <g transform="translate(0 -1)">
+      <path fill="#a66e49" d="M4 18h5v11H4zM24 18h5v11h-5z"/>
+      <use href="#front-body"/>
+    </g>
+  </g>
+  <g transform="translate(96 0)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v7H9zM18 27h6v11h-6z"/>
+    <path fill="#f5ead2" d="M7 32h8v3H7zM18 36h8v3h-8z"/>
+    <g transform="translate(0 0)">
+      <path fill="#a66e49" d="M4 20h5v11H4zM24 16h5v11h-5z"/>
+      <use href="#front-body"/>
+    </g>
+  </g>
+  <g transform="translate(0 40)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#8a593b" d="M13 27h6v7h-6z"/>
+    <path fill="#b7c5bc" d="M12 32h10v3H12z"/>
+    <path fill="#a66e49" d="M16 27h6v10h-6z"/>
+    <path fill="#f5ead2" d="M16 35h10v4H16z"/>
+    <g transform="translate(0 -1)">
+      <use href="#side-body"/>
+      <path fill="#a66e49" d="M14 19h5v11h-5z"/>
+      <path fill="#c5cebf" d="M13 18h7v5h-7z"/>
+    </g>
+  </g>
+  <g transform="translate(32 40)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#8a593b" d="M14 27h6v5h-7v4H7v-4h7z"/>
+    <path fill="#b7c5bc" d="M5 35h10v3H5z"/>
+    <path fill="#a66e49" d="M16 27h6v5h3v4h-6v-4h-3z"/>
+    <path fill="#f5ead2" d="M19 35h10v4H19z"/>
+    <g transform="translate(0 0)">
+      <use href="#side-body"/>
+      <path fill="#a66e49" d="M12 19h5v7h-4v4H8v-5h4z"/>
+      <path fill="#c5cebf" d="M13 18h7v5h-7z"/>
+    </g>
+  </g>
+  <g transform="translate(64 40)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#8a593b" d="M13 27h6v7h-6z"/>
+    <path fill="#b7c5bc" d="M12 32h10v3H12z"/>
+    <path fill="#a66e49" d="M16 27h6v10h-6z"/>
+    <path fill="#f5ead2" d="M16 35h10v4H16z"/>
+    <g transform="translate(0 -1)">
+      <use href="#side-body"/>
+      <path fill="#a66e49" d="M14 19h5v11h-5z"/>
+      <path fill="#c5cebf" d="M13 18h7v5h-7z"/>
+    </g>
+  </g>
+  <g transform="translate(96 40)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M14 27h6v5h-7v4H7v-4h7z"/>
+    <path fill="#f5ead2" d="M5 35h10v3H5z"/>
+    <path fill="#8a593b" d="M16 27h6v5h3v4h-6v-4h-3z"/>
+    <path fill="#b7c5bc" d="M19 35h10v4H19z"/>
+    <g transform="translate(0 0)">
+      <use href="#side-body"/>
+      <path fill="#a66e49" d="M16 19h5v6h5v5h-5v-4h-5z"/>
+      <path fill="#c5cebf" d="M13 18h7v5h-7z"/>
+    </g>
+  </g>
+  <g transform="translate(0 80)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v9H9zM18 27h6v9h-6z"/>
+    <path fill="#f5ead2" d="M7 34h8v3H7zM18 34h8v3h-8z"/>
+    <g transform="translate(0 -1)">
+      <path fill="#a66e49" d="M4 18h5v11H4zM24 18h5v11h-5z"/>
+      <use href="#back-body"/>
+    </g>
+  </g>
+  <g transform="translate(32 80)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v11H9zM18 27h6v7h-6z"/>
+    <path fill="#f5ead2" d="M7 36h8v3H7zM18 32h8v3h-8z"/>
+    <g transform="translate(0 0)">
+      <path fill="#a66e49" d="M4 16h5v11H4zM24 20h5v11h-5z"/>
+      <use href="#back-body"/>
+    </g>
+  </g>
+  <g transform="translate(64 80)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v9H9zM18 27h6v9h-6z"/>
+    <path fill="#f5ead2" d="M7 34h8v3H7zM18 34h8v3h-8z"/>
+    <g transform="translate(0 -1)">
+      <path fill="#a66e49" d="M4 18h5v11H4zM24 18h5v11h-5z"/>
+      <use href="#back-body"/>
+    </g>
+  </g>
+  <g transform="translate(96 80)">
+    <path fill="#253b36" opacity=".35" d="M5 35h22v3H5z"/>
+    <path fill="#a66e49" d="M9 27h6v7H9zM18 27h6v11h-6z"/>
+    <path fill="#f5ead2" d="M7 32h8v3H7zM18 36h8v3h-8z"/>
+    <g transform="translate(0 0)">
+      <path fill="#a66e49" d="M4 20h5v11H4zM24 16h5v11h-5z"/>
+      <use href="#back-body"/>
+    </g>
+  </g>
+</svg>

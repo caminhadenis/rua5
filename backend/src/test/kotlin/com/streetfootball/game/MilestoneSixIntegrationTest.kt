@@ -117,7 +117,7 @@ class MilestoneSixIntegrationTest {
     }
 
     @Test
-    fun `one owned athlete wins all five in strength order and trophy only appears on final win`() {
+    fun `five owned athletes permit choosing the same athlete for all five in strength order and trophy only appears on final win`() {
         val p = player()
         assertEquals("AVAILABLE", body(get(p, "/stadiums/benfica_stadium")).path("status").asString())
         val ordered = body(get(p, "/stadiums/benfica_stadium")).path("opponentLineup")
@@ -150,7 +150,7 @@ class MilestoneSixIntegrationTest {
             assertEquals(if (round == 5) 1 else 0, count("user_trophy"))
             val roster = roster(p)
             assertEquals(result, body(play(p, key, cmd)))
-            assertEquals(roster, roster(p))
+            assertEquals(persistentRoster(roster), persistentRoster(roster(p)))
             finalKey = key
             finalCommand = cmd
             finalResult = result
@@ -168,6 +168,24 @@ class MilestoneSixIntegrationTest {
             409,
             "IDEMPOTENCY_CONFLICT",
         )
+    }
+
+    @Test
+    fun `fewer than five athletes cannot create a stadium match or series`() {
+        val p = playerWithStarter("starter_leo")
+        for (definition in listOf("npc_nilo_01", "starter_breno", "starter_rafa", "stadium_lia")) {
+            assertError(play(p), 409, "STADIUM_ROSTER_INCOMPLETE")
+            assertEquals(0, count("game_match"))
+            assertEquals(0, count("stadium_series"))
+            jdbc.update(
+                "INSERT INTO owned_player (id, profile_id, player_definition_id, recruited_at) VALUES (?, ?, ?, now())",
+                UUID.randomUUID(),
+                p.profileId,
+                definition,
+            )
+        }
+        body(play(p))
+        assertEquals(1, count("game_match"))
     }
 
     @Test
@@ -198,7 +216,7 @@ class MilestoneSixIntegrationTest {
         assertEquals(0, count("user_trophy"))
         val after = roster(p)
         assertEquals(loss, body(play(p, key, cmd)))
-        assertEquals(after, roster(p))
+        assertEquals(persistentRoster(after), persistentRoster(roster(p)))
         engine.outcome = MatchOutcome.WIN
         val restart = body(play(p))
         assertEquals(
@@ -252,7 +270,7 @@ class MilestoneSixIntegrationTest {
                 "CREATE CONSTRAINT TRIGGER fail_m6 AFTER INSERT ON user_trophy DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_m6()",
             )
             assertError(play(p, key, cmd), 500, "INTERNAL_ERROR")
-            assertEquals(before, roster(p))
+            assertEquals(persistentRoster(before), persistentRoster(roster(p)))
             assertEquals(4, count("game_match"))
             assertEquals(4, body(get(p, "/stadiums/benfica_stadium")).path("series").path("played").asInt())
             assertEquals(0, count("user_trophy"))
@@ -301,7 +319,7 @@ class MilestoneSixIntegrationTest {
             )
         assertEquals(result.homeScore, receipt.path("match").path("homeScore").asInt())
         assertEquals(result.outcome.name, receipt.path("match").path("outcome").asString())
-        assertEquals(21, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(25, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
         assertFailsWith<DataIntegrityViolationException> {
             jdbc.update(
                 "INSERT INTO game_match SELECT gen_random_uuid(), profile_id, owned_player_id, mode, source_type, source_id, home_score, away_score, outcome, seed, engine_version, request_snapshot, events, statistics, gen_random_uuid(), created_at, rewards, stadium_id, home_penalties, away_penalties, series_id, expected_series_id, round_number FROM game_match",
@@ -394,7 +412,9 @@ class MilestoneSixIntegrationTest {
         val client = client()
         val profile = body(send(client, "POST", "/profiles", """{"displayName":"M5"}"""))
         val owned = body(send(client, "POST", "/profile/starter", """{"playerDefinitionId":"starter_leo"}"""))
-        return Player(client, UUID.fromString(profile.path("id").asString()), UUID.fromString(owned.path("id").asString()))
+        val player = Player(client, UUID.fromString(profile.path("id").asString()), UUID.fromString(owned.path("id").asString()))
+        five(player)
+        return player
     }
 
     private fun client() = HttpClient.newBuilder().cookieHandler(CookieManager()).build()

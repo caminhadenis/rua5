@@ -1,3 +1,5 @@
+import { recruitStadiumRoster } from './helpers/stadiumRoster'
+import { continueGame } from './helpers/opening'
 import { expect, test } from '@playwright/test'
 import { talkToStadiumCoach } from './stadiumHelpers'
 import type { StadiumInfo, StadiumResponse } from '../src/api/gameApi'
@@ -8,7 +10,9 @@ test('stadium entry is explorable and supporters oppose the visitor before coach
   page.on('pageerror', error => errors.push(error.message))
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Estádio individual' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
+  await recruitStadiumRoster(page)
   await page.goto('/')
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   await page.evaluate(async () => {
     const { game } = await import('/src/main.ts')
@@ -115,7 +119,7 @@ test('stadium entry is explorable and supporters oppose the visitor before coach
   await page.screenshot({ path: testInfo.outputPath('coach-announces-next-player.png') })
   await page.getByRole('button', { name: 'Próximo adversário' }).click()
   await expect(page.locator('.stadium-next-opponent')).toContainText(nextOpponent.name)
-  await expect(page.getByRole('radio')).toHaveCount(1)
+  await expect(page.getByRole('radio')).toHaveCount(5)
   const secondReceipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/matches'))
   await page.getByRole('button', { name: 'Iniciar duelo 1 × 1' }).click()
   const second = await (await secondReceipt).json() as StadiumResponse

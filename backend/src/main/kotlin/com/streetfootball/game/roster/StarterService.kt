@@ -34,6 +34,7 @@ class StarterService(
         return when (selectionPolicy.decide(profile.starterSelected, existing != null)) {
             StarterSelectionDecision.ALREADY_GRANTED -> existing!!.toDomain()
             StarterSelectionDecision.GRANT -> {
+                RosterPolicy.requireVacancy(ownedPlayerRepository.countByProfileId(profileId))
                 val now = Instant.now(clock)
                 val ownedPlayer =
                     ownedPlayerRepository.save(

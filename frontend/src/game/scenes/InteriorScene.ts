@@ -1,41 +1,65 @@
 import Phaser from 'phaser'
+import { gameAudio } from '../audio/GameAudio'
 import { TouchControls } from '../input/TouchControls'
 import { isPhone, isPhonePortrait } from '../input/mobileViewport'
 import { MobileDialogue } from '../ui/MobileDialogue'
 import { PlayerWalkAnimation } from '../entities/PlayerWalkAnimation'
 import { movementVelocity } from '../input/movement'
+import { touchesDoor } from '../maps/doors'
+import type { WorldScene } from './WorldScene'
 import { canInteract } from '../maps/interactions'
 import { INTERIORS, type InteriorLocation } from '../maps/locations'
+import { RECOVERY_STATIONS, type RecoveryStation } from '../maps/recoveryCenter'
+import { RecoveryCenterArt } from '../maps/RecoveryCenterArt'
+import { openRecoveryPanel } from '../ui/RecoveryPanel'
 import { TRAINING_SECTORS } from '../maps/trainingCenter'
 import { openTrainingPanel } from '../training/TrainingPanel'
+import { trackLocation } from '../save/location'
+import { button } from '../ui/ScenePanel'
+import { teamApi } from '../../api/gameApi'
 import type { TrainingFocus } from '../../api/gameApi'
 
 export class InteriorScene extends Phaser.Scene {
   player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
   private location!: InteriorLocation
-  private people: { name: string; dialogue: string; role?: 'trainer' | 'stadium-coach' | 'supporter'; focus?: TrainingFocus; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody }[] = []
+  private people: { name: string; dialogue: string; role?: 'trainer' | 'stadium-coach' | 'supporter' | 'physiotherapist' | 'masseur'; focus?: TrainingFocus; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody }[] = []
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
-  private keys!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'ENTER' | 'ESC', Phaser.Input.Keyboard.Key>
+  private keys!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'T' | 'ENTER' | 'ESC', Phaser.Input.Keyboard.Key>
   private walk!: PlayerWalkAnimation
   private dialogue?: Phaser.GameObjects.Container
   private dialogueFocus?: TrainingFocus
   private trainingOpen = false
   private stadiumId = 'benfica_stadium'
   private dialogueCoach = false
+  private checkingCoach = false
+  private resume?: { x: number; y: number }
   private touch!: TouchControls
   private mobileDialogue!: MobileDialogue
+  private recoveryArt?: RecoveryCenterArt
+  private recoveryHint?: Phaser.GameObjects.Text
+  private instructions?: Phaser.GameObjects.Text
+  private refreshingRecovery = false
 
   constructor() { super('InteriorScene') }
 
-  init(data: { key: string; stadiumId?: string }): void {
+  init(data: { key: string; stadiumId?: string; resume?: { x: number; y: number } }): void {
     const location = INTERIORS.find(place => place.key === data.key)
     if (!location) throw new Error(`Unknown interior: ${data.key}`)
     this.location = location
     this.stadiumId = data.stadiumId ?? 'benfica_stadium'
+    this.resume = data.resume
   }
 
   create(): void {
+    const restoreMusic = () => gameAudio.setMusic('city')
+    restoreMusic()
+    this.events.on(Phaser.Scenes.Events.WAKE, restoreMusic)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.WAKE, restoreMusic))
+    this.recoveryArt = undefined
+    this.recoveryHint = undefined
+    this.refreshingRecovery = false
     this.trainingOpen = false
+    this.checkingCoach = false
     this.dialogueFocus = undefined
     this.dialogue = undefined
     this.dialogueCoach = false
@@ -48,7 +72,7 @@ export class InteriorScene extends Phaser.Scene {
     const gap = this.location.pattern === 'wood' ? 42 : this.location.pattern === 'mat' ? 80 : 64
     for (let x = 76; x < 900; x += gap) floor.lineBetween(x, 94, x, 490)
     for (let y = 94; y < 490; y += this.location.pattern === 'wood' ? 28 : gap) floor.lineBetween(76, y, 900, y)
-    if (this.location.kind === 'gym') {
+    if (this.location.kind === 'gym' || this.location.kind === 'recovery') {
       this.add.text(480, 104, this.location.wallLabel, {
         fontFamily: 'monospace', fontSize: '15px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 9, y: 3 },
       }).setOrigin(0.5)
@@ -58,23 +82,27 @@ export class InteriorScene extends Phaser.Scene {
         fontFamily: 'monospace', fontSize: '14px', color: '#152b32',
       }).setOrigin(0.5)
     }
-    if (this.location.kind !== 'gym' && this.location.kind !== 'stadium') this.add.rectangle(480, 354, 148, 76, this.location.accentColor, 0.34).setStrokeStyle(2, this.location.accentColor)
+    if (this.location.kind !== 'gym' && this.location.kind !== 'stadium' && this.location.kind !== 'recovery') this.add.rectangle(480, 354, 148, 76, this.location.accentColor, 0.34).setStrokeStyle(2, this.location.accentColor)
     this.add.text(480, 42, this.location.name.toUpperCase(), {
       fontFamily: 'monospace', fontSize: '26px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 12, y: 5 },
     }).setOrigin(0.5)
     this.add.rectangle(480, 485, 90, 24, 0x594639)
-    this.add.text(480, 478, isPhone() ? 'SAÍDA' : 'SAÍDA · E', { fontFamily: 'monospace', fontSize: '16px', color: '#f7d154' }).setOrigin(0.5)
-    this.add.text(16, height - 25, this.location.kind === 'gym'
+    this.add.text(480, 478, 'SAÍDA', { fontFamily: 'monospace', fontSize: '16px', color: '#f7d154' }).setOrigin(0.5)
+    this.instructions = this.add.text(16, height - 25, this.location.kind === 'gym'
       ? 'Setas / WASD: andar   E: conversar   Enter: iniciar após conversa   Esc: sair'
-      : 'Setas / WASD: andar   E / Enter: conversar ou sair   Esc: sair', {
+      : 'Setas / WASD: andar   E / Enter: conversar   Portas: passagem automática   Esc: sair', {
       fontFamily: 'monospace', fontSize: '15px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 8, y: 3 },
     }).setDepth(100).setVisible(!isPhone())
 
     this.physics.world.setBounds(80, 100, 800, 390)
     const world = this.scene.get('WorldScene') as Phaser.Scene & { player: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody }
-    this.player = this.physics.add.sprite(480, 435, world.player.texture.key, 'front-0')
+    this.player = this.physics.add.sprite(this.resume?.x ?? 480, this.resume?.y ?? 435, 'coach', 'front-0')
       .setSize(18, 14).setOffset(7, 26).setCollideWorldBounds(true).setDepth(435)
     this.walk = new PlayerWalkAnimation(this.player)
+    trackLocation(this, () => ({
+      worldX: world.player.x, worldY: world.player.y,
+      interior: { key: this.location.key, x: this.player.x, y: this.player.y },
+    }))
     // Each room supplies its own furniture plan; items are solid and leave a central route.
     for (const item of this.location.furniture) {
       const { x, y, width: w, height: h, kind } = item
@@ -100,12 +128,21 @@ export class InteriorScene extends Phaser.Scene {
       this.physics.add.existing(furniture, true)
       this.physics.add.collider(this.player, furniture)
     }
+    if (this.location.kind === 'recovery') {
+      this.recoveryArt = new RecoveryCenterArt(this, this.player)
+      this.recoveryHint = this.add.text(480, 520, '', { fontFamily: 'monospace', fontSize: '16px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 8, y: 4 } }).setOrigin(0.5).setDepth(99)
+      const refresh = () => { void this.refreshRecovery() }
+      this.events.on(Phaser.Scenes.Events.WAKE, refresh)
+      this.time.addEvent({ delay: 5000, loop: true, callback: () => { if (this.scene.isActive() && !this.trainingOpen) refresh() } })
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.WAKE, refresh))
+      refresh()
+    }
     if (this.location.kind === 'gym') this.drawTrainingCenter()
     if (this.location.kind === 'stadium') this.drawStadium()
     const residents = this.location.kind === 'gym'
       ? [...this.location.people, ...TRAINING_SECTORS.map(sector => ({
         name: sector.coach, dialogue: sector.dialogue, role: 'trainer' as const, focus: sector.focus,
-        sprite: 'resident-sport' as const, x: sector.x + 76, y: sector.y + 34,
+        sprite: sector.sprite, x: sector.x + 76, y: sector.y + 34,
       }))]
       : this.location.people
     this.people = residents.map((person, index) => {
@@ -119,13 +156,20 @@ export class InteriorScene extends Phaser.Scene {
     })
     const keyboard = this.input.keyboard!
     this.cursors = keyboard.createCursorKeys()
-    this.keys = keyboard.addKeys('W,A,S,D,E,ENTER,ESC') as typeof this.keys
+    this.keys = keyboard.addKeys('W,A,S,D,E,T,ENTER,ESC') as typeof this.keys
     this.touch = new TouchControls(this, () => {
       if (this.player.body) this.player.setVelocity(0, 0)
       keyboard.resetKeys()
       this.walk.stop()
     })
     this.mobileDialogue = new MobileDialogue(this)
+    const team = button(document.getElementById('game')!, 'Equipe · T', () => this.openTeam())
+    team.className = 'world-team-button'
+    const hideTeam = () => { team.hidden = true }
+    const showTeam = () => { team.hidden = false }
+    this.events.on(Phaser.Scenes.Events.SLEEP, hideTeam)
+    this.events.on(Phaser.Scenes.Events.WAKE, showTeam)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { team.remove(); this.events.off(Phaser.Scenes.Events.SLEEP, hideTeam); this.events.off(Phaser.Scenes.Events.WAKE, showTeam) })
     const animate = (_time: number, delta: number) => this.walk.update(Boolean(this.dialogue?.visible), delta)
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, animate)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, animate))
@@ -139,7 +183,7 @@ export class InteriorScene extends Phaser.Scene {
   }
 
   update(): void {
-    if (this.trainingOpen || isPhonePortrait()) {
+    if (this.trainingOpen || this.checkingCoach || isPhonePortrait()) {
       this.touch.setContext({ visible: false })
       this.player.setVelocity(0, 0)
       return
@@ -147,14 +191,20 @@ export class InteriorScene extends Phaser.Scene {
     const nearby = this.people.filter(person => canInteract(this.player.body.center, person.sprite.body.center))
       .sort((a, b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, a.sprite.x, a.sprite.y)
         - Phaser.Math.Distance.Between(this.player.x, this.player.y, b.sprite.x, b.sprite.y))[0]
+    const station = this.location.kind === 'recovery'
+      ? RECOVERY_STATIONS.filter(item => canInteract(this.player.body.center, item)).sort((a, b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) - Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y))[0]
+      : undefined
     const dialogueOpen = Boolean(this.dialogue?.visible)
-    const nearExit = canInteract(this.player.body.center, { x: 480, y: 475 })
+    this.recoveryHint?.setText(!dialogueOpen && station ? `${station.label} · ${isPhone() ? 'toque em Recuperar' : 'E / Enter para escolher jogador'}` : '').setVisible(Boolean(!isPhone() && !dialogueOpen && station))
+    this.instructions?.setVisible(!isPhone() && !(this.location.kind === 'recovery' && station && !dialogueOpen))
+    const nearExit = Math.hypot(this.player.body.center.x - 480, this.player.body.center.y - 475) <= 24
     this.touch.setContext({
-      visible: true, movement: !dialogueOpen,
+      visible: true, movement: !dialogueOpen, team: true,
       confirm: dialogueOpen ? this.dialogueCoach ? 'Desafiar' : this.dialogueFocus ? 'Treinar' : 'Continuar'
-        : nearExit ? 'Sair' : nearby ? 'Conversar' : undefined,
+        : nearExit ? 'Sair' : station ? 'Recuperar' : nearby ? 'Conversar' : undefined,
       back: dialogueOpen ? 'Fechar' : 'Sair',
     })
+    if (Phaser.Input.Keyboard.JustDown(this.keys.T) || this.touch.input.consume('team')) { this.openTeam(); return }
     const interact = Phaser.Input.Keyboard.JustDown(this.keys.E)
     const confirm = this.touch.input.consume('confirm')
     const enter = Phaser.Input.Keyboard.JustDown(this.keys.ENTER) || confirm
@@ -181,7 +231,8 @@ export class InteriorScene extends Phaser.Scene {
         this.input.keyboard!.resetKeys()
         const world = this.scene.get('WorldScene')
         void openTrainingPanel(this, focus, () => {
-          this.trainingOpen = false
+                this.trainingOpen = false
+          this.checkingCoach = false
           this.input.keyboard?.resetKeys()
         }, roster => world.events.emit('roster-updated', roster))
         return
@@ -194,16 +245,25 @@ export class InteriorScene extends Phaser.Scene {
       }
       return
     }
-    if (escape || ((interact || enter) && nearExit)) {
+    if (escape || touchesDoor(this.player.body, { x: 480, y: 485 }, 90, 24) || ((interact || enter) && nearExit)) {
       this.leave()
+      return
+    }
+    if ((interact || enter) && station) {
+      this.openRecovery(station)
       return
     }
     if ((interact || enter) && nearby) {
       this.player.setVelocity(0, 0)
       this.dialogueFocus = nearby.focus
-      this.dialogueCoach = nearby.role === 'stadium-coach'
+      if (nearby.role === 'stadium-coach') {
+        void this.talkToCoach(nearby)
+        return
+      }
+      this.dialogueCoach = false
       this.showDialogue(nearby.name, nearby.dialogue, nearby.role === 'supporter' ? 'Torcedor do time de Dimas'
-        : nearby.role === 'trainer' || this.dialogueCoach ? 'Treinador(a)' : 'Morador')
+        : nearby.role === 'trainer' || this.dialogueCoach ? 'Treinador(a)'
+          : nearby.role === 'physiotherapist' ? 'Fisioterapia' : nearby.role === 'masseur' ? 'Massagem' : 'Morador')
       return
     }
     const touch = this.touch.input.directions
@@ -215,6 +275,50 @@ export class InteriorScene extends Phaser.Scene {
     })
     this.player.setVelocity(velocity.x, velocity.y)
     this.player.setDepth(this.player.y)
+  }
+
+  private async refreshRecovery(): Promise<void> {
+    if (!this.recoveryArt || this.refreshingRecovery) return
+    this.refreshingRecovery = true
+    try {
+      const roster = await teamApi.roster()
+      if (!this.scene.isActive()) return
+      await this.recoveryArt.showPatients(roster.flatMap(player => player.recovery ? [{ stationId: player.recovery.stationId, player }] : []))
+    } catch { /* Preserve clinic ambience while offline; the selection panel offers retry. */ }
+    finally { this.refreshingRecovery = false }
+  }
+
+  private openRecovery(station: RecoveryStation): void {
+    this.player.setVelocity(0, 0)
+    this.walk.stop()
+    this.touch.reset()
+    this.trainingOpen = true
+    this.touch.setContext({ visible: false })
+    this.recoveryHint?.setVisible(false)
+    this.input.keyboard?.resetKeys()
+    void openRecoveryPanel(this, station, () => {
+      this.trainingOpen = false
+      this.input.keyboard?.resetKeys()
+      void this.refreshRecovery()
+    }, roster => {
+      this.scene.get('WorldScene').events.emit('roster-updated', roster)
+      void this.recoveryArt?.showPatients(roster.flatMap(player => player.recovery ? [{ stationId: player.recovery.stationId, player }] : [])).catch(() => { /* Selection and recovery state remain available if a portrait cannot load. */ })
+    })
+  }
+
+  private async talkToCoach(person: typeof this.people[number]): Promise<void> {
+    this.checkingCoach = true
+    this.dialogueCoach = false
+    this.showDialogue(person.name, 'Deixe-me conferir seu elenco…', 'Treinador')
+    try {
+      const roster = await teamApi.roster()
+      if (!this.scene.isActive()) return
+      this.dialogueCoach = roster.length >= 5
+      this.showDialogue(person.name, this.dialogueCoach ? person.dialogue
+        : `Ainda não posso aceitar seu desafio. Você precisa ter pelo menos 5 jogadores no elenco! Seu time tem ${roster.length}. Vença desafiantes nas ruas e convide-os para completar o time.`, 'Treinador')
+    } catch {
+      if (this.scene.isActive()) this.showDialogue(person.name, 'Não consegui conferir seu elenco. Feche a conversa e fale comigo novamente para tentar.', 'Treinador')
+    } finally { this.checkingCoach = false }
   }
 
   private showDialogue(name: string, words: string, role: string): void {
@@ -286,8 +390,24 @@ export class InteriorScene extends Phaser.Scene {
     }
   }
 
+  private openTeam(): void {
+    if (this.trainingOpen || this.checkingCoach || !this.scene.isActive()) return
+    this.player.setVelocity(0, 0)
+    this.walk.stop()
+    this.touch.reset()
+    this.mobileDialogue.close()
+    this.dialogue?.setVisible(false)
+    this.input.keyboard?.resetKeys()
+    this.scene.sleep()
+    this.scene.run('TeamScene', { returnScene: 'InteriorScene' })
+  }
+
   private leave(): void {
     this.input.keyboard?.resetKeys()
+    this.player.setVelocity(0, 0)
+    this.touch.reset()
+    const world = this.scene.get('WorldScene') as WorldScene
+    world.returnFromInterior(this.location.key)
     this.scene.stop()
     this.scene.wake('WorldScene')
   }

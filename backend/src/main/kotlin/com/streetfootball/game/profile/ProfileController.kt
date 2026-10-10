@@ -1,5 +1,6 @@
 package com.streetfootball.game.profile
 
+import com.streetfootball.game.challenge.IdempotencyConflictException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -9,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
@@ -35,6 +37,33 @@ class ProfileController(
         profileSession.attach(request.getSession(true), profile.id)
         return profile.toResponse()
     }
+
+    @PostMapping("/profile/new-game")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun newGame(
+        @Valid @RequestBody body: CreateProfileRequest,
+        @RequestHeader("Idempotency-Key") key: UUID,
+        request: HttpServletRequest,
+    ): ProfileResponse {
+        val session = request.getSession(true)
+        synchronized(session) {
+            val previous = session.getAttribute("newGameCommand") as? NewGameCommand
+            if (previous?.key == key) {
+                if (previous.body != body) throw IdempotencyConflictException()
+                return profileService.load(previous.profileId).toResponse()
+            }
+            val profile = profileService.create(body.displayName, body.primaryColor, body.secondaryColor)
+            profileSession.attach(session, profile.id)
+            session.setAttribute("newGameCommand", NewGameCommand(key, body, profile.id))
+            return profile.toResponse()
+        }
+    }
+
+    private data class NewGameCommand(
+        val key: UUID,
+        val body: CreateProfileRequest,
+        val profileId: UUID,
+    ) : java.io.Serializable
 
     @GetMapping("/profile")
     fun load(request: HttpServletRequest): ProfileResponse = profileService.load(profileSession.requireProfileId(request)).toResponse()

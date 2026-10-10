@@ -30,7 +30,7 @@ O objetivo deste documento não é antecipar todos os detalhes possíveis do jog
 
 Um RPG de futebol com exploração de cidade em pixel art.
 
-O jogador controla um personagem que anda por bairros, encontra jogadores em quadras e ruas, desafia esses NPCs em duelos individuais, recruta novos atletas e evolui seu elenco.
+O usuário controla um treinador fixo, pardo e de cabelo preto, com polo esportiva, bermuda, tênis e apito. Esse avatar é igual para todos os perfis e independente dos atletas e das cores do time. Ele anda por bairros, encontra desafiantes, escolhe atletas para duelos individuais, recruta jogadores e evolui seu elenco.
 
 Ao preparar seus atletas, o jogador enfrenta cinco duelos 1x1 consecutivos em cada estádio. Cada treinador possui cinco jogadores, com o mais forte por último. Vencer todos na mesma tentativa concede um troféu e libera progressivamente níveis maiores da jornada; uma derrota exige recomeçar pelo primeiro rival:
 
@@ -122,9 +122,15 @@ Não construir “o Brasil inteiro” antes de validar um bairro.
 O MVP MUST permitir o seguinte fluxo:
 
 ```text
-abrir jogo
+abrir menu pixelado Rua 5: INICIAR, CONTINUAR, OPÇÕES
   ↓
-criar/carregar perfil e escolher as cores do time
+INICIAR: nova formatura na universidade (CONTINUAR: retomar jornada existente)
+  ↓
+receber canudo do reitor, informar nome e ouvir orientações
+  ↓
+caminhar até a saída e conversar com Miguel na rua
+  ↓
+escolher as cores do time e criar a nova jornada
   ↓
 escolher 1 de 3 starters
   ↓
@@ -148,7 +154,7 @@ desbloquear recrutamento
   ↓
 recrutar jogadores
   ↓
-preparar um atleta do elenco
+reunir cinco atletas no elenco
   ↓
 entrar no estádio do bairro e caminhar até o treinador
   ↓
@@ -593,6 +599,7 @@ Eles MUST NOT substituir stats individuais.
 Antes de escolher um dos três starters, o usuário escolhe a cor principal e a
 secundária do time, com prévia do uniforme. A confirmação cria o perfil com essas
 cores; recarregar antes de escolher o starter retoma a escolha do jogador.
+Na abertura, Miguel pergunta quais serão as cores do time após a formatura.
 As cores são cosméticas, persistidas no perfil e usadas pelo primeiro jogador e
 por todos os recrutados, inclusive nos cartões, duelos e poses de emoção.
 Pele, cabelo e identidade do atleta são preservados. NPCs ainda no bairro mantêm
@@ -723,9 +730,11 @@ se o valor efetivo ainda for menor que 99. Quatro sessões somam +1; cada ganho 
 já altera o atributo efetivo e o desempenho em partidas. Nível e XP não mudam.
 O valor atual e o ganho por sessão são mostrados na tela, e a treinadora da academia explica
 a regra em diálogo automático quando o jogador entra no prédio. O treino só pode ser
-iniciado após conversar com o treinador do setor correspondente. O backend aplica
-um intervalo de um minuto por atleta; outro atleta do mesmo perfil pode treinar
-imediatamente. O status retorna o próximo horário disponível por `ownedPlayerId`.
+iniciado após conversar com o treinador do setor correspondente. Não há tempo de espera
+entre sessões, mesmo com o atleta exausto. Ao concluir os cinco segundos, o botão
+“Treinar novamente” permite outra sessão imediatamente. O desgaste continua seguindo
+a seção 11.6. `GET /training/status` mantém `cooldowns: []` por compatibilidade; novos
+recibos retornam `nextAvailableAt` igual ao horário da própria sessão.
 O comando usa `Idempotency-Key`; retry retorna o mesmo resultado sem reaplicar bônus.
 O backend deriva o perfil da sessão, valida a posse e persiste o bônus. Os snapshots de
 duelos e estádio passam a usar esse bônus; partidas históricas não mudam. Treinos não
@@ -733,6 +742,81 @@ alteram placares ou recompensas de partidas já realizadas. A V20 converte os b�
 inteiros existentes em quartos de ponto, preservando seu valor. Contadores parciais
 antigos são zerados no próximo treino daquele fundamento, sem recompensa retroativa;
 retries de sessões antigas devolvem o resultado original. Ver ADR-0009.
+
+## 11.6 Cansaço individual
+
+Por decisão explícita do usuário, o MVP passa a ter cansaço entre atividades (ADR-0011).
+Cada atleta começa com zero, inclusive em saves existentes. Treino gera +12;
+duelo de rua ou estádio gera +18, em vitória, empate ou derrota. O valor é limitado
+entre 0 e 100 e recupera 4 pontos por minuto real, inclusive fora do jogo.
+A recuperação é calculada sob demanda pelo relógio do backend; consultar o elenco
+não altera o estado persistido. Trocar de fundamento, NPC, mapa ou atleta não zera desgaste.
+
+| Cansaço | Condição | Penalidade nos cinco atributos |
+|---|---|---|
+| 0 ≤ valor < 30 | Disposto | 0% |
+| 30 ≤ valor < 60 | Cansado | 5% |
+| 60 ≤ valor < 85 | Muito cansado | 10% |
+| 85 ≤ valor ≤ 100 | Exausto | 15% |
+
+A partida usa o cansaço antes do comando em um snapshot fixo, com atributos
+`clamp(permanentStat * (1 - penaltyPercent / 100), 1, 99)`. O desgaste recebido
+na atividade afeta atividades posteriores. O engine permanece puro e suas versões
+não mudam, pois recebem os atributos já ajustados. Snapshots e recompensas históricas
+não são recalculados. A política de desgaste tem versão 1 nos novos recibos.
+
+Por nova solicitação explícita, o intervalo entre treinos foi removido (ADR-0012).
+Cansaço também não bloqueia treinos. Treinos continuam concedendo +0,25, sem XP ou mudança de nível;
+o limite de 99 é verificado sobre atributos permanentes, antes da penalidade.
+Cansaço nunca bloqueia duelos de rua, inclusive com um único atleta. O estádio exige cinco atletas no elenco, independentemente da condição individual. Cansaço não muda XP, requisitos,
+retorno decrescente, troféus ou regras de retomada do estádio.
+
+`GET /roster` preserva `stats` permanentes e acrescenta `matchStats` ajustados e
+`fatigue` com `value`, `condition`, `penaltyPercent`, `nextConditionAt` e
+`fullyRecoveredAt` (horários UTC, nulos quando não aplicáveis). Condições usam
+`RESTED`, `TIRED`, `VERY_TIRED`, `EXHAUSTED`. Esses campos são projeções do tempo atual.
+Recibos de treino, recompensa de rua e cada recompensa individual de estádio incluem
+`fatigue: { before, after, gained, policyVersion }`; recibos históricos usam `null`.
+`gained` indica o custo da atividade, mesmo quando o limite de 100 absorve parte dele.
+A interface mostra condição, penalidade, previsão de recuperação e desgaste recebido,
+com atualização autoritativa periódica enquanto a seleção estiver aberta.
+
+Partida/treino, desgaste e progresso são uma única transação. Comandos do perfil
+continuam serializados pelo lock existente. Retry recupera o recibo original antes
+de validar estado mutável e não aplica desgaste ou bônus outra vez. A V22 adiciona
+campos com constraints. A V23 permite intervalo zero para novos treinos e preserva
+os horários de recibos históricos somente para replay idempotente; nenhum prazo antigo
+bloqueia uma nova sessão. Se o comando for confirmado e a atualização do elenco falhar,
+o cliente repete somente essa consulta, sem criar outra sessão.
+
+## 11.7 Centro de Recuperação
+
+Por solicitação explícita, `benfica.recovery.entry` fica isolado no extremo sul do Benfica,
+numa clareira acessível por uma trilha longa e sinuosa entre árvores com colisão. Academia,
+estádio, desafiantes e portas anteriores mantêm suas posições. A recuperação natural
+continua em 4 pontos por minuto; não há atalho ou transporte para o centro.
+
+O interior explorável contém fisioterapeuta, massagista, três macas e dois grandes
+baldes de gelo. Avatares de visitantes descansam nas macas como ambientação; atletas
+do próprio elenco aparecem com sua identidade e uniforme no local do tratamento.
+Aproximar-se de uma maca ou balde e usar E/Enter (Recuperar no celular) abre a escolha
+individual do atleta. Não existe ação de iniciar tratamento à distância na interface.
+
+Qualquer estação, maca ou banho de gelo, recupera todo o cansaço em cinco segundos.
+Não há diferença de velocidade entre elas; a escolha é apenas de ambientação. Durante
+o tratamento, essa regra substitui a recuperação natural, sem somá-la.
+O atleta fica indisponível para novos treinos, duelos, estádios e dispensa enquanto
+estiver em tratamento. Ao atingir zero, fica disponível automaticamente, sem precisar
+retornar ao prédio. É possível interromper no local, preservando o cansaço já recuperado;
+a partir dali volta a recuperar naturalmente. Atletas sem cansaço não iniciam tratamento.
+
+O relógio do backend calcula recuperação e conclusão sob demanda, inclusive após sair,
+recarregar ou fechar o jogo. O estado e os recibos são persistidos em PostgreSQL pela V25,
+sem scheduler. O cliente nunca reduz cansaço por conta própria. A ocupação é individual
+por jornada: um atleta por maca ou balde, sem compartilhar o centro entre usuários.
+Comandos idempotentes por perfil serializam a ocupação e preservam recibos antes das
+validações mutáveis. Seleções de treino e duelo desabilitam atletas em recuperação;
+a tela Equipe continua permitindo consultar seus atributos. Ver ADR-0016.
 
 ---
 
@@ -790,17 +874,32 @@ Essas reações são apresentação; não recalculam resultado ou recompensa. Se
 foi recrutado no resultado, ele sai do mapa e não abre essa conversa de revanche.
 
 Desafiantes puxam conversa automaticamente ao se aproximar, uma vez por aproximação.
+Durante a exploração, os desafiantes caminham em trajetos curtos e repetitivos de
+ida e volta, com pequenas pausas nas pontas e ritmos diferentes. Os percursos começam
+no spawn ou na posição do último encontro, respeitam as colisões do mapa e evitam
+sobreposição com outros NPCs. Eles param perto do treinador e durante diálogos,
+seleções, onboarding ou quando a cena está suspensa; retomam ao voltar à exploração.
+Ao notar o treinador, a aproximação e a conversa automáticas têm prioridade sobre
+o percurso. Isso também vale para atletas dispensados. Desafiantes, atletas dispensados e Miguel
+usam a mesma animação de caminhada do treinador: quatro poses por direção, pernas
+e braços alternados a cada 16 pixels, frente/perfil/costas e repouso ao parar.
+As silhuetas dos NPCs usam a geometria dos passos do treinador com a aparência e
+paleta próprias. Patrulhas, aproximações e o passeio de Miguel animam os membros;
+a colisão dos pés permanece 18×14, sem oscilar com os quadros. A movimentação é apresentação
+local do cliente: os IDs, spawns e posições persistidas de dispensa são preservados.
 Não há nomes flutuando sobre personagens; o nome aparece apenas durante a conversa.
 Moradores comuns usam os mesmos controles de proximidade, mas só conversam após E/Enter.
 Suas falas apresentam o estádio e a dificuldade do adversário, sem desafios ou recompensas.
 As casas, a escola, o centro de treinamento e o prédio residencial possuem portas com IDs estáveis.
-Entrar troca para uma sala local, onde o personagem pode andar e conversar com moradores;
-sair devolve à mesma posição no bairro. Os interiores e as falas são conteúdo estático
+Entrar troca para uma sala local, onde o personagem pode andar e conversar com moradores.
+Encostar na soleira de qualquer entrada ou saída faz a passagem automaticamente,
+sem E/Enter. Na rua, o avatar retorna um pouco afastado da porta para evitar
+reentrada imediata; a posição respeita o lado externo de cada edifício. Os interiores e as falas são conteúdo estático
 do cliente; no centro, os comandos de treino e recompensas continuam autoritativos no
 backend. Moradores fazem pequenos movimentos de espera.
 O mapa do Benfica também inclui um estádio visível e um lago decorativo.
 Moradores e edifícios são conteúdo estático do mapa com IDs estáveis.
-O Benfica ampliado usa 72×50 tiles. O estádio fica no sudeste, no fim da rota dos
+O Benfica usa 72×84 tiles, incluindo a trilha isolada do Centro de Recuperação ao sul. O estádio fica no sudeste, no fim da rota dos
 desafiantes: Nilo → Cora → Davi → Bia → Rui → Sol → Teca → Zeca. A distância de cada
 desafiante ao estádio diminui conforme a dificuldade aumenta. Interiores possuem
 plantas, móveis, cores e posições de moradores diferentes. Os moradores apresentam
@@ -849,7 +948,8 @@ legadas sem recompensa não desbloqueiam recrutamento retroativamente.
 
 Recrutamento MUST ser idempotente.
 
-Uma mesma definição de jogador não deve ser recrutada duas vezes para o mesmo perfil no MVP.
+Uma mesma definição de jogador não pode ocupar duas vagas para o mesmo perfil.
+Recontratar um dispensado reativa o mesmo OwnedPlayer e preserva seu progresso.
 
 Constraint recomendada:
 
@@ -859,17 +959,51 @@ UNIQUE(profile_id, player_definition_id)
 
 ## 13.3 Elenco
 
-O elenco total MAY ser maior que 5.
+O elenco ativo MUST ter no máximo cinco jogadores, incluindo o starter.
+Com cinco, um convite novo retorna `409 ROSTER_FULL`, sem consumir a disponibilidade.
+Retries de uma contratação já confirmada continuam retornando a mesma identidade,
+mesmo com o time cheio. Comandos por perfil são serializados; a V24 também protege
+inserções e reativações no banco. Saves antigos com mais de cinco são preservados,
+mas não podem contratar até dispensar atletas e deixar menos de cinco ativos.
 
-A tela Equipe mostra o elenco, atributos, convites e conquistas, sem slots de posição
+A tela Equipe mostra contagem de vagas (n/5), elenco, atributos, dispensa, convites e conquistas, sem slots de posição
 ou editor de escalação. Todas as novas partidas usam um atleta por lado, escolhido
 antes de cada duelo.
+
+## 13.4 Dispensa
+
+Pelo menu Equipe, disponível durante a exploração da rua e dos interiores (botão
+ou T), o treinador pode dispensar qualquer atleta, inclusive o starter ou o último.
+A ação pede confirmação e libera uma vaga. O atleta vira um desafiante exclusivo
+daquela jornada na posição do treinador no mapa principal; dentro de um prédio,
+fica do lado de fora, na posição de entrada mantida no bairro. Essa localização é
+persistida no servidor e reaparece após reload; o spawn estático anterior permanece
+oculto somente para esse perfil. Ao ser recontratado, ele desaparece do mapa.
+
+OwnedPlayer é preservado com `roster_active = false`: nível, XP, histórico, treino,
+cansaço e referências de partidas não são apagados. O duelo contra o dispensado
+usa seu nível e atributos treinados, com o cansaço recuperado pelo relógio do backend.
+Ele não pode ser usado como atleta próprio para novos duelos, estádios, treinos ou
+lineup. Sua posição na lineup legada é removida na mesma transação.
+
+O convite passa a `AVAILABLE` sem exigir nova vitória, permitindo recuperar um elenco
+vazio. O banco distingue essa origem com `recruitment_by_dismissal`, sem inventar
+vitórias nem alterar regras de XP. Desafiantes globais continuam disponíveis para
+outros perfis na posição original. Starters dispensados recebem um challenger privado.
+O histórico de partidas, treinos e tentativas de estádio permanece válido.
+
+`POST /roster/{id}/dismiss` exige `Idempotency-Key: UUID`; o recibo durável precede
+validações mutáveis. Repetir uma dispensa antiga após recontratar devolve o recibo
+sem dispensar novamente; trocar atleta ou posição com a mesma chave recebe conflito.
+Posições aceitam apenas o mapa atual Benfica e coordenadas finitas dentro dos limites.
+A posição é apresentação geométrica; o cliente nunca define nível ou atributos.
+Falhas fazem rollback de toda a operação. Ver ADR-0015.
 
 ---
 
 # 14. Elenco e seleção individual
 
-O elenco pode conter vários atletas. Antes de cada duelo de rua ou estádio, o jogador
+O elenco ativo contém de zero a cinco atletas. Antes de cada duelo de rua ou estádio, o jogador
 escolhe um único OwnedPlayer. Pode usar o mesmo atleta nos cinco jogos do estádio ou
 trocar entre duelos. Roles continuam descrevendo os atletas, sem posições simultâneas
 ou bônus de composição em partidas. Não há distribuição de atletas por posições na
@@ -927,12 +1061,14 @@ Não escrever cadeia de `if` hardcoded por estádio.
 
 Antes de iniciar partida:
 
+- perfil deve possuir pelo menos cinco atletas, sem exigir lineup ou usar todos em cada duelo;
 - atleta escolhido deve pertencer ao perfil da sessão;
 - requisitos devem estar atendidos;
 - estádio não pode já estar concluído;
 - perfil deve ter acesso à área.
 
 Backend MUST validar tudo.
+Ao conversar com Dimas, um elenco menor que cinco recebe uma recusa explícita antes de abrir a seleção. O POST também rejeita com `409 STADIUM_ROSTER_INCOMPLETE`, antes de criar partida ou tentativa; retries já confirmados continuam precedendo as verificações mutáveis.
 
 ## 15.5 Sequência e troféu
 
@@ -1521,6 +1657,16 @@ respostas de criação e de `GET /api/v1/profile`. API e banco validam o formato
 Para compatibilidade com clientes anteriores, omitir as cores usa `#f7d154` e
 `#24354a`. A interface sempre oferece a escolha antes de criar o perfil.
 
+### Nova jornada
+
+`POST /api/v1/profile/new-game` recebe o mesmo corpo de criação e exige
+`Idempotency-Key: UUID`. Cria um novo perfil e o associa à sessão, sem apagar o
+perfil e as partidas anteriores. Durante a mesma sessão, retry do último comando
+retorna o mesmo perfil; reutilizar a chave com outro corpo recebe
+`409 IDEMPOTENCY_CONFLICT`. O comando é serializado na sessão do servidor.
+O endpoint legado `/profiles` mantém seu contrato. A nova jornada é criada após
+Miguel confirmar as cores, para evitar um perfil incompleto antes da formatura.
+
 ## 20.3 Starters
 
 ```http
@@ -1590,7 +1736,14 @@ Se for necessário restaurar posição fina no mapa, MAY guardar `x/y`, mas chec
 
 ```http
 GET /api/v1/roster
+POST /api/v1/roster/{id}/dismiss
+GET /api/v1/maps/{mapId}/released-players
 ```
+
+Dispensa: `Idempotency-Key: UUID`, corpo `{ "mapId": "benfica", "x": 704, "y": 640 }`.
+Retorna `{ ownedPlayerId, challengerId, mapId, x, y }`. A listagem de dispensados é
+privada da sessão e retorna `{ id, playerDefinitionId, name, level, mapId, x, y }`.
+GET roster lista somente atletas ativos.
 
 ## 20.7 Lineup (API legada)
 
@@ -1626,7 +1779,8 @@ e pertencer à sessão. PUT substitui tudo atomicamente; slots ocupados ficam em
 GET /api/v1/challenges/{id}
 ```
 
-Retorna dados visíveis do oponente, histórico e possível recompensa.
+Retorna dados visíveis do oponente, histórico, possível recompensa e `rosterFull`.
+Para dispensados, usa o nível preservado e permite convite imediato.
 
 ## 20.9 Iniciar duelo
 
@@ -1674,7 +1828,8 @@ Deve:
 
 - validar status;
 - ser idempotente;
-- criar OwnedPlayer uma única vez;
+- exigir uma vaga para novo atleta ou reativação;
+- criar OwnedPlayer uma única vez ou reativar o dispensado;
 - marcar recrutamento concluído.
 
 No M5, a idempotência é natural por perfil da sessão + desafiante, sem chave adicional.
@@ -1730,6 +1885,28 @@ GET /api/v1/matches/{id}
 
 Não é bloqueador do primeiro milestone.
 
+## 20.14 Recuperação
+
+`POST /api/v1/recovery/sessions` exige `Idempotency-Key: UUID` e recebe
+`{ "ownedPlayerId": "UUID", "stationId": "benfica.recovery.bed.01" }`.
+Stations oficiais: `benfica.recovery.bed.01` a `.03`, `benfica.recovery.ice.01` e `.02`.
+Método, taxa, cansaço e horários são derivados pelo backend. Resposta:
+`{ session: { id, ownedPlayerId, stationId, method, startedAt, completesAt, cancelledAt }, fatigue, policyVersion }`.
+
+`POST /api/v1/recovery/sessions/{id}/cancel` exige a mesma forma de chave de idempotência,
+corpo vazio e posse do tratamento pela sessão. Devolve o mesmo formato, com `cancelledAt`.
+Chaves repetidas devolvem o recibo original; mudar ação, atleta, estação ou tratamento
+com uma mesma chave retorna `409 IDEMPOTENCY_CONFLICT`. Retry de interrupção antiga nunca
+interrompe um tratamento novo.
+
+`GET /roster` acrescenta `recovery: { sessionId, stationId, method, completesAt }` durante
+tratamento ativo e `null` ao terminar. As previsões em `fatigue` usam a taxa ativa.
+Erros de domínio: `PLAYER_RECOVERING`, `PLAYER_ALREADY_RESTED`,
+`RECOVERY_STATION_OCCUPIED`, `RECOVERY_SESSION_CHANGED` (409), estações/tratamentos
+inexistentes (404), posse de atleta alheio (403). IDs e corpo inválidos recebem 400.
+A ampliação do mapa permite posições de dispensa no Benfica até y=2672;
+checkpoints cosméticos antigos continuam válidos.
+
 ---
 
 # 21. Formato de erro
@@ -1777,6 +1954,7 @@ Scenes sugeridas:
 BootScene
 PreloadScene
 MainMenuScene
+GraduationScene
 WorldScene
 TeamScene
 MatchScene
@@ -1798,6 +1976,28 @@ Evitar scene por detalhe pequeno.
 - fontes;
 - áudio.
 
+### Menu e formatura
+
+O menu sempre aparece ao abrir o cliente, com uma quadra de futebol vista de cima
+em estilo pixelado ao fundo e o título Rua 5 centralizado. INICIAR começa a cerimônia de uma nova
+jornada; CONTINUAR só é habilitado quando a sessão tem um perfil recuperável;
+OPÇÕES permanece desabilitado. A consulta de save e a retomada oferecem retry.
+A graduação tem dezoito colegas sentados, reitor idoso, entrega animada do canudo,
+campo de nome (1–40 caracteres após trim) e falas sobre exploração, duelos,
+convites, treinamento, cansaço, cinco atletas e a sequência do estádio.
+Só após terminar as falas o avatar pode caminhar até a saída, usando teclado ou
+direcional de toque. Miguel se aproxima automaticamente na rua e encaminha a
+escolha das cores e dos três starters. Depois da confirmação do servidor, Miguel
+parabeniza a escolha e comenta os pontos fortes daquele atleta, explica o menu
+Equipe/Elenco (T), o ganho de XP e nível nos desafios e o treino de fundamentos
+sem XP. Oferece acompanhar o treinador numa caminhada automática até a academia,
+por um trajeto que respeita as colisões. O passeio é opcional; ao chegar, Miguel
+apresenta os cinco setores e permite entrar ou continuar explorando. Durante o
+passeio não há encontros nem comandos de progresso, e girar o celular para a
+vertical pausa a caminhada. O avatar de treinador permanece o mesmo
+nos interiores, no bairro e após retomar a jornada; cartões e partidas mostram
+os atletas escolhidos.
+
 ## 22.3 WorldScene
 
 Responsável por:
@@ -1811,6 +2011,19 @@ Responsável por:
 - entrada de estádio.
 
 Não deve conter regras de XP ou simulação.
+
+O minimapa fixo do Benfica mostra a posição atual do treinador, as ruas e três
+pontos com legenda: E (estádio), T (centro de treinamento) e R (centro de recuperação).
+Ele aparece no canto superior direito do desktop e abaixo do direcional no celular,
+fora dos alvos de toque. É ocultado em diálogos, seleções e outras scenes e volta
+quando a exploração é retomada. Não concede transporte ou acesso à distância.
+
+Pessoas distintas têm nomes distintos no bairro, nos interiores e nos setores de
+treino. Os IDs de conteúdo são preservados. A V26 renomeia somente a dribladora
+`npc_iris_01` para Estela; Íris permanece a defensora do estádio. Snapshots históricos
+continuam com os nomes originais. Moradores têm estilos de roupa, pele, cabelo,
+barba e acessórios variados; atletas conservam sua identidade visual no mapa,
+cartões e duelos, mudando a roupa apenas ao serem recrutados.
 
 ### Controles no navegador do celular
 
@@ -1844,7 +2057,8 @@ ausência dos controles no PC, diálogo/duelo real e acesso à academia/estádio
 - level;
 - arquétipo;
 - consulta dos atributos de um atleta selecionado;
-- convites de recrutamento;
+- convites de recrutamento e bloqueio quando o elenco tem cinco;
+- dispensa confirmada do atleta selecionado;
 - conquistas;
 - sem slots de posição ou botão de salvar escalação.
 
@@ -1904,7 +2118,19 @@ Um store simples MAY ser suficiente.
 
 # 24. Persistência e save
 
-O save principal fica no PostgreSQL.
+O save de progresso principal fica no PostgreSQL. CONTINUAR consulta o perfil da
+sessão, restaura elenco/XP/recrutamentos/troféus pelos endpoints autoritativos e
+retoma a posição geométrica local associada ao `profileId`. Esse checkpoint
+cosmético registra rua ou interior e é atualizado a cada 500 ms, ao suspender a
+scene e ao ocultar/sair da página. Conteúdo inválido ou localização desconhecida
+é descartado. Ele não guarda estatísticas ou recompensas e não autoriza partidas.
+Sem checkpoint local, a retomada começa na entrada do bairro; uma jornada ainda
+sem starter retorna ao encontro com Miguel. A formatura antes da confirmação das
+cores ainda não tem save. INICIAR usa novo perfil, sem copiar progresso.
+
+A identidade ainda depende da sessão HTTP local, que não sobrevive ao reinício do
+backend. Retomada entre dispositivos ou reinícios do servidor exige a futura
+identidade persistente/autenticação; esta entrega não inventa conta ou token de save.
 
 IndexedDB/localStorage MAY ser usado para:
 
@@ -2241,7 +2467,7 @@ Obrigatórios:
 
 ### Stadium rules
 
-- um atleta próprio é suficiente, independentemente do lineup;
+- quatro atletas rejeitados sem efeitos; cinco ou mais aceitos, independentemente do lineup;
 - requisito ausente rejeitado;
 - já vencido rejeitado;
 - quinta vitória consecutiva concede trophy;
@@ -2252,7 +2478,10 @@ Obrigatórios:
 ### Recruitment
 
 - só após condição;
-- não duplica jogador.
+- não duplica jogador;
+- limita o elenco a cinco sob concorrência e permite retry já confirmado;
+- dispensa preserva progresso, retorna o desafiante no ponto escolhido e permite recontratar;
+- valida posse, posição, privacidade, rollback e retries após recontratar.
 
 ## 31.2 Backend integration
 
@@ -2543,7 +2772,8 @@ NPC
 - recrutar;
 - jogador aparece no roster;
 - não duplicar;
-- consultar todos os atletas, sem limite de cinco ou slots de posição.
+- consultar os atletas, com limite de cinco ativos e sem slots de posição;
+- dispensar para liberar uma vaga e reencontrar o desafiante no ponto da dispensa.
 
 O editor de cinco slots da entrega original foi removido após a adoção de duelos
 1x1 em todos os jogos. A API e o schema legados permanecem por compatibilidade.
@@ -2565,7 +2795,8 @@ O editor de cinco slots da entrega original foi removido após a adoção de due
 ### Aceite
 
 ```text
-um atleta próprio -> permitido
+menos de cinco atletas próprios -> recusa
+cinco ou mais atletas próprios -> permitido
 quatro vitórias -> sem troféu
 quinta vitória consecutiva -> troféu
 derrota em qualquer rodada -> próxima tentativa começa pelo primeiro
@@ -2601,12 +2832,19 @@ A V18 acrescenta Nina ao norte, Beto a oeste, Joca no centro-leste e Maiara no
 sudeste, totalizando dezesseis desafiantes espalhados pelo mapa.
 A seleção e o recrutamento usam o ID do NPC abordado; a Equipe consulta todos os convites.
 O refinamento V16 concentra os diálogos da academia em uma faixa superior compacta,
-mantém somente o treinador em cada setor e aplica cooldown de um minuto por atleta.
+mantém somente o treinador em cada setor e originalmente aplicava cooldown de um minuto por atleta.
+A V23 remove a espera entre treinos após a inclusão do cansaço; o atleta pode repetir
+a sessão assim que a animação terminar (ADR-0012).
 
-O HUD orienta preparar um atleta → estádio → cinco vitórias consecutivas → conquista. Há sons sintetizados
-originais para gol/vitória/convite e opção de silêncio persistida como preferência local.
+O HUD orienta reunir cinco atletas → estádio → cinco vitórias consecutivas → conquista. Há quatro trilhas sintetizadas originais em loop para menu, formatura solene, ambiente
+da cidade e disputa. Aceitar o duelo inicia sua música; o resultado interrompe a disputa
+e toca vitória, empate ou derrota. O alerta acompanha o “!” do desafiante. Apito, gol,
+entrega do diploma, troféu e convite também têm efeitos. O botão “Som: ativar” libera
+o áudio no menu após interação; a opção de silêncio mantém a preferência local e
+interrompe inclusive sons em andamento. Ocultar a aba pausa o áudio; retornar restaura
+a trilha atual. Ver ADR-0014.
 As chamadas HTTP expiram após 15 segundos para permitir retry nas telas existentes.
-Reload restaura progresso do servidor durante a sessão HTTP; a posição volta à entrada.
+Reload abre o menu; CONTINUAR restaura progresso do servidor durante a sessão HTTP e o último checkpoint local.
 Autenticação e retomada entre reinícios do servidor não fazem parte desta entrega local.
 
 Validação: `MilestoneSevenIntegrationTest` completa o bairro com os três starters e
@@ -2630,10 +2868,16 @@ GIVEN
 não existe progresso do usuário
 
 WHEN
-crio um perfil
+seleciono INICIAR
 
 THEN
-posso escolher as cores do time e depois 1 dos 3 starters
+vejo a formatura, informo meu nome e recebo o canudo
+
+WHEN
+saio da universidade
+
+THEN
+Miguel oferece escolher as cores do time e depois 1 dos 3 starters
 
 WHEN
 escolho o starter
@@ -2682,7 +2926,13 @@ THEN
 o jogador aparece no roster uma única vez
 
 WHEN
-tenho ao menos 1 jogador
+tenho menos de 5 jogadores
+
+THEN
+o treinador do estádio recusa o desafio sem criar partida
+
+WHEN
+tenho ao menos 5 jogadores
 
 THEN
 posso escolher um atleta para cada duelo de estádio
@@ -2860,9 +3110,8 @@ Não implementar antes do core estar balanceado.
 
 ## 41.5 Energia/stamina
 
-MAY afetar eventos de uma partida.
-
-Não criar barra de energia entre partidas no MVP.
+Cansaço entre atividades foi incluído no MVP por solicitação explícita do usuário.
+A regra autoritativa está na seção 11.6; ver ADR-0011. Não há lesões ou itens de recuperação.
 
 ## 41.6 Itens/equipamentos
 

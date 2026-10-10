@@ -2,12 +2,15 @@ package com.streetfootball.game.roster
 
 import com.streetfootball.game.match.domain.MatchStats
 import com.streetfootball.game.profile.ProfileSession
+import com.streetfootball.game.progression.FatiguePolicy
+import com.streetfootball.game.progression.FatigueStatus
 import com.streetfootball.game.progression.Progression
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
 import java.util.UUID
 
 @RestController
@@ -28,6 +31,15 @@ class RosterService(
     fun list(profileId: UUID) =
         owned.findAllByProfileIdOrderByRecruitedAt(profileId).map { player ->
             val definition = definitions.findById(player.playerDefinitionId).orElseThrow()
+            val now = Instant.now()
+            val recovery = player.recoveryAt(now)
+            val fatigue = FatiguePolicy.status(player.fatigueAt(now), now, if (recovery != null) player.fatigue * 12.0 else 4.0)
+            val permanent =
+                Progression.effectiveStats(
+                    MatchStats(definition.speed, definition.dribbling, definition.finishing, definition.defending, definition.physical),
+                    player.level,
+                    player.trainingBonuses(),
+                )
             RosterPlayerResponse(
                 player.id,
                 player.playerDefinitionId,
@@ -40,17 +52,10 @@ class RosterService(
                 player.losses,
                 definition.archetype,
                 definition.preferredRole,
-                Progression.effectiveStats(
-                    MatchStats(
-                        definition.speed,
-                        definition.dribbling,
-                        definition.finishing,
-                        definition.defending,
-                        definition.physical,
-                    ),
-                    player.level,
-                    player.trainingBonuses(),
-                ),
+                permanent,
+                fatigue,
+                FatiguePolicy.matchStats(permanent, fatigue.value),
+                recovery,
             )
         }
 }
@@ -68,4 +73,7 @@ data class RosterPlayerResponse(
     val archetype: Archetype,
     val preferredRole: PreferredRole,
     val stats: MatchStats,
+    val fatigue: FatigueStatus,
+    val matchStats: MatchStats,
+    val recovery: com.streetfootball.game.progression.RecoveryStatus? = null,
 )

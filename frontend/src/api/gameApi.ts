@@ -1,16 +1,30 @@
 import { createIdempotencyKey } from './idempotencyKey'
 
-export interface Profile { id: string; starterSelected: boolean; primaryColor: string; secondaryColor: string }
+export interface Profile { id: string; displayName: string; starterSelected: boolean; primaryColor: string; secondaryColor: string }
 export interface Starter { id: string; name: string; archetype: string }
+export interface FatigueStatus {
+  value: number; condition: 'RESTED' | 'TIRED' | 'VERY_TIRED' | 'EXHAUSTED'
+  penaltyPercent: number; nextConditionAt: string | null; fullyRecoveredAt: string | null
+}
+export interface FatigueChange { before: FatigueStatus; after: FatigueStatus; gained: number; policyVersion: string }
+export type RecoveryMethod = 'REST' | 'ICE_BATH'
+export interface RecoveryStatus { sessionId: string; stationId: string; method: RecoveryMethod; completesAt: string }
+export interface RecoveryReceipt {
+  session: { id: string; ownedPlayerId: string; stationId: string; method: RecoveryMethod; startedAt: string; completesAt: string; cancelledAt: string | null }
+  fatigue: FatigueStatus; policyVersion: string
+}
+
 export interface RosterPlayer {
   id: string; playerDefinitionId: string; name: string; level: number; xp: number
   xpToNextLevel: number | null; wins: number; draws: number; losses: number
   archetype: 'DRIBBLER' | 'FINISHER' | 'PLAYMAKER' | 'MARKER'
   preferredRole: 'DEFENDER' | 'MIDFIELDER' | 'ATTACKER'
   stats: Record<'speed' | 'dribbling' | 'finishing' | 'defending' | 'physical', number>
+  fatigue?: FatigueStatus; matchStats?: RosterPlayer['stats']; recovery?: RecoveryStatus | null
 }
 export interface ChallengeInfo {
   id: string; name: string; level: number; recruitable: boolean
+  rosterFull?: boolean
   recruitmentStatus: 'LOCKED' | 'AVAILABLE' | 'RECRUITED'
 }
 export type EventType = 'POSSESSION' | 'DRIBBLE_SUCCESS' | 'TACKLE' | 'SHOT' | 'SHOT_MISSED' | 'GOAL' | 'SAVE' | 'PENALTY_GOAL' | 'PENALTY_MISSED'
@@ -29,6 +43,7 @@ export interface DuelResponse {
     ownedPlayerId: string; xpAwarded: number; previousLevel: number; currentLevel: number
     previousXp: number; currentXp: number; xpToNextLevel: number | null
     challengerProgress: { attempts: number; wins: number; draws: number; losses: number }
+    fatigue?: FatigueChange | null
     recruitmentUnlocked?: boolean
   } | null
 }
@@ -52,7 +67,12 @@ export async function request<T>(path: string, body?: unknown, key?: string, met
   return response.json() as Promise<T>
 }
 
+export interface DismissalLocation { mapId: string; x: number; y: number }
+export interface ReleasedPlayer extends DismissalLocation { id: string; playerDefinitionId: string; name: string; level: number }
+
 export const teamApi = {
+  released: () => request<ReleasedPlayer[]>('/maps/benfica/released-players'),
+  dismiss: (id: string, location: DismissalLocation, key: string) => request<{ challengerId: string }>(`/roster/${id}/dismiss`, location, key),
   roster: () => request<RosterPlayer[]>('/roster'),
   challenge: (id: string) => request<ChallengeInfo>(`/challenges/${id}`),
   recruit: (id: string) => request<{ challengerId: string; ownedPlayerId: string }>(`/challenges/${id}/recruit`, {}),
@@ -65,6 +85,7 @@ export interface TrainingResult {
   xpToNextLevel: number | null; nextAvailableAt: string
   statBefore: number | null; statAfter: number | null
   progressBefore: number | null; progressAfter: number | null
+  fatigue?: FatigueChange | null
 }
 
 export interface TrainingStatus {
@@ -147,7 +168,7 @@ export interface SeriesProgress { id: string; played: number; wins: number; fini
 export interface StadiumResponse {
   match: DuelResponse['match'] & { mode: 'STADIUM_1V1'; penalties: { home: number; away: number } | null }
   rewards: {
-    players: { ownedPlayerId: string; xpAwarded: number; previousLevel: number; currentLevel: number; currentXp: number }[]
+    players: { ownedPlayerId: string; xpAwarded: number; previousLevel: number; currentLevel: number; currentXp: number; fatigue?: FatigueChange | null }[]
     trophy: { id: string; name: string } | null
     series: SeriesProgress
   }
@@ -197,6 +218,35 @@ export class StadiumCommand {
       const value = parseStadium(await request<StadiumResponse>(`/stadiums/${id}/matches`, { ownedPlayerId, seriesId, roundNumber }, pending.key))
       this.pending = undefined
       return value
+    } catch (error) {
+      if (error instanceof ApiError && error.rejected) this.pending = undefined
+      throw error
+    }
+  }
+}
+
+/** An uncertain response retries the same durable treatment command. */
+export class RecoveryCommand {
+  private pending?: { action: 'START' | 'CANCEL'; targetId: string; stationId?: string; key: string }
+
+  start(ownedPlayerId: string, stationId: string): Promise<RecoveryReceipt> {
+    return this.execute('START', ownedPlayerId, stationId)
+  }
+
+  cancel(sessionId: string): Promise<RecoveryReceipt> {
+    return this.execute('CANCEL', sessionId)
+  }
+
+  private async execute(action: 'START' | 'CANCEL', targetId: string, stationId?: string): Promise<RecoveryReceipt> {
+    this.pending ??= { action, targetId, stationId, key: createIdempotencyKey() }
+    const pending = this.pending
+    if (pending.action !== action || pending.targetId !== targetId || pending.stationId !== stationId) throw new Error('Confirme a recuperação pendente primeiro.')
+    try {
+      const result = action === 'START'
+        ? await request<RecoveryReceipt>('/recovery/sessions', { ownedPlayerId: targetId, stationId }, pending.key)
+        : await request<RecoveryReceipt>(`/recovery/sessions/${targetId}/cancel`, {}, pending.key)
+      this.pending = undefined
+      return result
     } catch (error) {
       if (error instanceof ApiError && error.rejected) this.pending = undefined
       throw error

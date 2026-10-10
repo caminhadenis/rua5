@@ -1,5 +1,11 @@
 package com.streetfootball.game.roster
 
+import com.streetfootball.game.progression.FatigueChange
+import com.streetfootball.game.progression.FatiguePolicy
+import com.streetfootball.game.progression.RecoveryMethod
+import com.streetfootball.game.progression.RecoveryPolicy
+import com.streetfootball.game.progression.RecoveryRuleException
+import com.streetfootball.game.progression.RecoveryStatus
 import com.streetfootball.game.progression.StatBonuses
 import com.streetfootball.game.progression.TrainingFocus
 import com.streetfootball.game.progression.TrainingPolicy
@@ -42,10 +48,57 @@ class OwnedPlayerEntity(
     var trainingPhysicalQuarters: Int = 0,
     @field:Column(name = "recruited_at", nullable = false)
     var recruitedAt: Instant = Instant.now(),
+    @field:Column(nullable = false)
+    var fatigue: Double = 0.0,
+    @field:Column(name = "fatigue_updated_at")
+    var fatigueUpdatedAt: Instant? = null,
+    @field:Column(name = "roster_active", nullable = false)
+    var rosterActive: Boolean = true,
+    @field:Column(name = "recovery_session_id")
+    var recoverySessionId: UUID? = null,
+    @field:Column(name = "recovery_station_id", length = 64)
+    var recoveryStationId: String? = null,
+    @field:Column(name = "recovery_method", length = 16)
+    var recoveryMethod: String? = null,
+    @field:Column(name = "recovery_ends_at")
+    var recoveryEndsAt: Instant? = null,
     @field:Version
     @field:Column(nullable = false)
     var version: Long = 0,
 ) {
+    fun fatigueAt(now: Instant): Double =
+        recoveryMethod?.let {
+            RecoveryPolicy.recover(fatigue, fatigueUpdatedAt!!, now)
+        } ?: FatiguePolicy.recover(fatigue, fatigueUpdatedAt, now)
+
+    fun recoveryAt(now: Instant): RecoveryStatus? =
+        recoveryEndsAt?.takeIf { now < it }?.let {
+            RecoveryStatus(recoverySessionId!!, recoveryStationId!!, RecoveryMethod.valueOf(recoveryMethod!!), it)
+        }
+
+    fun requireAvailable(now: Instant) {
+        if (recoveryAt(now) != null) throw RecoveryRuleException("PLAYER_RECOVERING")
+    }
+
+    fun clearRecovery() {
+        recoverySessionId = null
+        recoveryStationId = null
+        recoveryMethod = null
+        recoveryEndsAt = null
+    }
+
+    fun addFatigue(
+        cost: Int,
+        now: Instant,
+    ): FatigueChange {
+        requireAvailable(now)
+        val change = FatiguePolicy.add(fatigueAt(now), cost, now)
+        clearRecovery()
+        fatigue = change.after.value
+        fatigueUpdatedAt = now
+        return change
+    }
+
     // Integer quarter points preserve exact gains and previously earned whole-point bonuses.
     fun trainingBonuses() =
         StatBonuses(

@@ -1,3 +1,4 @@
+import { continueGame } from '../e2e/helpers/opening'
 import { expect, test } from '@playwright/test'
 import currentMap from '../src/assets/maps/benfica.json' with { type: 'json' }
 
@@ -17,11 +18,13 @@ test('an old map cached at the previous URL cannot break the updated game', asyn
   await page.request.post('/api/v1/profiles', { data: { displayName: 'Map update' } })
   await page.request.post('/api/v1/profile/starter', { data: { playerDefinitionId: 'starter_leo' } })
   const response = await page.goto('/')
+  await continueGame(page)
   expect(response!.headers()['cache-control']).toContain('no-cache')
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   expect(staleMapRequests).toBe(0)
   expect(errors).toEqual([])
   await page.reload()
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   expect(errors).toEqual([])
 })

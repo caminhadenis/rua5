@@ -10,6 +10,7 @@ import com.streetfootball.game.roster.PlayerDefinitionRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -29,6 +30,7 @@ data class TrainingResult(
     val statAfter: Double?,
     val progressBefore: Int?,
     val progressAfter: Int?,
+    val fatigue: FatigueChange? = null,
 )
 
 data class TrainingProgress(
@@ -53,6 +55,7 @@ class TrainingService(
     private val ownedPlayers: OwnedPlayerRepository,
     private val definitions: PlayerDefinitionRepository,
     private val jdbc: JdbcTemplate,
+    private val json: ObjectMapper,
 ) {
     @Transactional(readOnly = true)
     fun status(profileId: UUID): TrainingStatus {
@@ -61,7 +64,7 @@ class TrainingService(
             jdbc.query(
                 """SELECT p.owned_player_id, p.focus, p.sessions_completed
                FROM owned_player_training_progress p JOIN owned_player o ON o.id = p.owned_player_id
-               WHERE o.profile_id = ? ORDER BY p.owned_player_id, p.focus""",
+               WHERE o.profile_id = ? AND o.roster_active ORDER BY p.owned_player_id, p.focus""",
                 { row, _ ->
                     TrainingProgress(
                         row.getObject("owned_player_id", UUID::class.java),
@@ -71,29 +74,9 @@ class TrainingService(
                 },
                 profileId,
             )
-        val cooldowns =
-            jdbc.query(
-                """SELECT owned_player_id, MAX(trained_at) AS last_training FROM training_session
-               WHERE profile_id = ? GROUP BY owned_player_id ORDER BY owned_player_id""",
-                { row, _ ->
-                    val last = row.getTimestamp("last_training").toInstant()
-                    TrainingCooldown(
-                        row.getObject("owned_player_id", UUID::class.java),
-                        requireNotNull(TrainingPolicy.nextAvailableAt(last)),
-                    )
-                },
-                profileId,
-            )
-        return TrainingStatus(cooldowns, progress)
+        // Legacy response field retained; training no longer has an availability delay.
+        return TrainingStatus(emptyList(), progress)
     }
-
-    private fun lastTraining(ownedPlayerId: UUID): Instant? =
-        jdbc
-            .query(
-                "SELECT trained_at FROM training_session WHERE owned_player_id = ? ORDER BY trained_at DESC LIMIT 1",
-                { row, _ -> row.getTimestamp(1).toInstant() },
-                ownedPlayerId,
-            ).singleOrNull()
 
     @Transactional
     fun train(
@@ -124,12 +107,13 @@ class TrainingService(
                                 Progression.xpForNextLevel(row.getInt("current_level"))
                             },
                             row.getTimestamp("trained_at").toInstant().plus(
-                                if (row.getObject("stat_before") == null) java.time.Duration.ofSeconds(90) else TrainingPolicy.cooldown,
+                                java.time.Duration.ofSeconds(row.getLong("cooldown_seconds")),
                             ),
                             (row.getObject("stat_before") as Number?)?.toDouble(),
                             (row.getObject("stat_after") as Number?)?.toDouble(),
                             (row.getObject("progress_before") as Number?)?.toInt(),
                             (row.getObject("progress_after") as Number?)?.toInt(),
+                            row.getString("fatigue_change")?.let { json.readValue(it, FatigueChange::class.java) },
                         )
                     },
                     profileId,
@@ -141,9 +125,9 @@ class TrainingService(
         }
         val owned = ownedPlayers.findById(playerId).orElseThrow(::OwnedPlayerNotFoundException)
         if (owned.profileId != profileId) throw PlayerNotOwnedException()
+        if (!owned.rosterActive) throw OwnedPlayerNotFoundException()
         val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
-        val last = lastTraining(playerId)
-        if (!TrainingPolicy.canTrain(now, last)) throw TrainingCooldownException(requireNotNull(TrainingPolicy.nextAvailableAt(last)))
+        owned.requireAvailable(now)
         val definition = definitions.findById(owned.playerDefinitionId).orElseThrow(::OwnedPlayerNotFoundException)
         val base =
             MatchStats(
@@ -173,6 +157,7 @@ class TrainingService(
             focus.name,
             step.progressAfter,
         )
+        val fatigue = owned.addFatigue(FatiguePolicy.TRAINING_COST, now)
         val result =
             TrainingResult(
                 playerId,
@@ -183,16 +168,17 @@ class TrainingService(
                 owned.xp,
                 owned.xp,
                 if (owned.level == Progression.MAX_LEVEL) null else Progression.xpForNextLevel(owned.level),
-                now.plus(TrainingPolicy.cooldown),
+                now,
                 before,
                 after,
                 progressBefore,
                 step.progressAfter,
+                fatigue,
             )
         jdbc.update(
             """INSERT INTO training_session (profile_id, idempotency_key, owned_player_id, focus, xp_awarded,
-                previous_level, current_level, previous_xp, current_xp, trained_at, stat_before, stat_after, progress_before, progress_after)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                previous_level, current_level, previous_xp, current_xp, trained_at, stat_before, stat_after, progress_before, progress_after, cooldown_seconds, fatigue_change)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)""",
             profileId,
             key,
             playerId,
@@ -207,14 +193,12 @@ class TrainingService(
             after,
             progressBefore,
             step.progressAfter,
+            0,
+            json.writeValueAsString(fatigue),
         )
         return result
     }
 }
-
-class TrainingCooldownException(
-    val nextAvailableAt: Instant,
-) : RuntimeException()
 
 class TrainingStatMaxException : RuntimeException()
 

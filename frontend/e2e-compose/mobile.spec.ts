@@ -1,3 +1,5 @@
+import { startOpening, continueGame, finishStarterGuidance } from '../e2e/helpers/opening'
+import { persistentRoster } from '../e2e/helpers/roster'
 import { expect, test } from '@playwright/test'
 import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
 import { expectPanelFits } from '../e2e/helpers/mobilePanel'
@@ -9,9 +11,10 @@ test('compiled phone client walks, challenges and restores progress using only t
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
-  await page.getByRole('button', { name: 'Começar', exact: true }).tap()
+  await startOpening(page)
   await page.getByRole('button', { name: 'Confirmar cores', exact: true }).tap()
   await page.getByRole('button', { name: 'Escolher Aderlou' }).tap()
+  await finishStarterGuidance(page)
   const controls = page.getByRole('navigation', { name: 'Controles de toque' })
   await expect(controls).toBeVisible()
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeHidden()
@@ -44,7 +47,8 @@ test('compiled phone client walks, challenges and restores progress using only t
   expect(roster[0]!.xp).toBe(result.rewards!.currentXp)
   expect(roster[0]!.wins + roster[0]!.draws + roster[0]!.losses).toBe(1)
   await page.reload()
+  await continueGame(page)
   await expect(controls).toBeVisible()
-  expect(await (await page.request.get('/api/v1/roster')).json()).toEqual(roster)
+  expect(persistentRoster(await (await page.request.get('/api/v1/roster')).json())).toEqual(persistentRoster(roster))
   expect(errors).toEqual([])
 })

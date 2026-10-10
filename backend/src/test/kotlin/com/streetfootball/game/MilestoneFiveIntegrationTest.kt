@@ -74,6 +74,8 @@ class MilestoneFiveIntegrationTest {
         outcome = MatchOutcome.WIN
     }
 
+    @Autowired private lateinit var dismissal: com.streetfootball.game.roster.DismissalService
+
     @TestConfiguration(proxyBeanMethods = false)
     class EngineConfig {
         @Bean @Primary
@@ -248,7 +250,7 @@ class MilestoneFiveIntegrationTest {
                 ),
             )
             assertEquals(
-                21,
+                25,
                 upgrade.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success AND type = 'SQL'", Int::class.java),
             )
         }
@@ -377,6 +379,178 @@ class MilestoneFiveIntegrationTest {
             results.forEach { assertEquals(200, it.get(30, TimeUnit.SECONDS).statusCode()) }
         }
         assertTrue(lineup(p) in listOf(full, full.reversed()).map { ids -> ids.map { it.toString() } })
+    }
+
+    @Test
+    fun `five player capacity blocks new invitations but allows committed retries`() {
+        val p = player()
+        duel(p)
+        val invited = body(recruit(p))
+        for (index in 2..4) {
+            val challenger = UUID.fromString("00000000-0000-4000-8000-${index.toString().padStart(12, '0')}")
+            body(send(p.client, "POST", "/challenges/$challenger/matches", """{"ownedPlayerId":"${p.ownedId}"}""", UUID.randomUUID()))
+            body(send(p.client, "POST", "/challenges/$challenger/recruit"))
+        }
+        assertEquals(5, roster(p).size())
+        assertEquals(invited, body(recruit(p)))
+        val fifth = UUID.fromString("00000000-0000-4000-8000-000000000005")
+        body(send(p.client, "POST", "/challenges/$fifth/matches", """{"ownedPlayerId":"${p.ownedId}"}""", UUID.randomUUID()))
+        assertTrue(body(get(p, "/challenges/$fifth")).path("rosterFull").asBoolean())
+        assertError(send(p.client, "POST", "/challenges/$fifth/recruit"), 409, "ROSTER_FULL")
+        val nilo = UUID.fromString(invited.path("ownedPlayerId").asString())
+        body(dismiss(p, nilo))
+        body(send(p.client, "POST", "/challenges/$fifth/recruit"))
+        assertEquals(5, roster(p).size())
+        assertError(recruit(p), 409, "ROSTER_FULL")
+        assertEquals("AVAILABLE", body(get(p, "/challenges/$NILO")).path("recruitmentStatus").asString())
+    }
+
+    @Test
+    fun `concurrent different invitations cannot exceed five and database also guards capacity`() {
+        val p = player()
+        val ids = fivePlayers(p)
+        body(dismiss(p, ids.last()))
+        val cora = UUID.fromString("00000000-0000-4000-8000-000000000002")
+        for (id in listOf(
+            NILO,
+            cora,
+        )) {
+            body(send(p.client, "POST", "/challenges/$id/matches", """{"ownedPlayerId":"${p.ownedId}"}""", UUID.randomUUID()))
+        }
+        Executors.newFixedThreadPool(2).use { executor ->
+            val results =
+                listOf(NILO, cora)
+                    .map { id -> executor.submit(Callable { send(p.client, "POST", "/challenges/$id/recruit") }) }
+                    .map { it.get(30, TimeUnit.SECONDS) }
+            assertEquals(listOf(200, 409), results.map { it.statusCode() }.sorted())
+            assertError(results.single { it.statusCode() == 409 }, 409, "ROSTER_FULL")
+        }
+        assertEquals(5, roster(p).size())
+        assertFailsWith<DataIntegrityViolationException> {
+            jdbc.update(
+                "INSERT INTO owned_player (id, profile_id, player_definition_id, recruited_at) VALUES (?, ?, 'starter_rafa', now())",
+                UUID.randomUUID(),
+                p.profileId,
+            )
+        }
+    }
+
+    @Test
+    fun `dismissal preserves progression moves challenger cleans lineup and retries cannot dismiss rehires`() {
+        val p = player()
+        val other = player()
+        duel(p)
+        val nilo = UUID.fromString(body(recruit(p)).path("ownedPlayerId").asString())
+        jdbc.update("UPDATE owned_player SET level = 6, xp = 17, training_speed = 7 WHERE id = ?", nilo)
+        putLineup(p, listOf(nilo, null, null, null, null))
+        val prior = roster(p).toList().single { it.path("id").asString() == nilo.toString() }
+        val key = UUID.randomUUID()
+        val receipt = body(dismiss(p, nilo, key))
+        assertEquals(receipt, body(dismiss(p, nilo, key)))
+        assertEquals(1, roster(p).size())
+        assertEquals(List(5) { null }, lineup(p))
+        val released = body(get(p, "/maps/benfica/released-players")).single()
+        assertEquals(704.0, released.path("x").asDouble())
+        assertEquals(640.0, released.path("y").asDouble())
+        assertEquals(6, body(get(p, "/challenges/$NILO")).path("level").asInt())
+        assertEquals(0, body(get(other, "/maps/benfica/released-players")).size())
+        assertEquals(1, body(get(other, "/challenges/$NILO")).path("level").asInt())
+        assertError(
+            send(p.client, "POST", "/training/sessions", """{"ownedPlayerId":"$nilo","focus":"SPEED"}""", UUID.randomUUID()),
+            404,
+            "OWNED_PLAYER_NOT_FOUND",
+        )
+        assertError(
+            send(p.client, "POST", "/challenges/$NILO/matches", """{"ownedPlayerId":"$nilo"}""", UUID.randomUUID()),
+            404,
+            "OWNED_PLAYER_NOT_FOUND",
+        )
+        val match = body(duel(p))
+        assertEquals(
+            6,
+            match
+                .path("match")
+                .path("away")
+                .single()
+                .path("level")
+                .asInt(),
+        )
+        body(recruit(p))
+        assertEquals(prior.path("stats"), roster(p).toList().single { it.path("id").asString() == nilo.toString() }.path("stats"))
+        assertEquals(prior.path("xp"), roster(p).toList().single { it.path("id").asString() == nilo.toString() }.path("xp"))
+        assertEquals(0, body(get(p, "/maps/benfica/released-players")).size())
+        assertEquals(receipt, body(dismiss(p, nilo, key)))
+        assertEquals(2, roster(p).size())
+        assertError(dismiss(p, p.ownedId, key), 409, "IDEMPOTENCY_CONFLICT")
+    }
+
+    @Test
+    fun `last player and starter can be dismissed privately and rehired without a duel`() {
+        val p = player()
+        val other = player()
+        val receipt = body(dismiss(p, p.ownedId))
+        val challenger = UUID.fromString(receipt.path("challengerId").asString())
+        assertEquals(0, roster(p).size())
+        assertTrue(body(get(p, "/challenges/$challenger")).path("recruitable").asBoolean())
+        assertError(get(other, "/challenges/$challenger"), 404, "CHALLENGER_NOT_AVAILABLE")
+        assertError(send(other.client, "POST", "/challenges/$challenger/recruit"), 404, "CHALLENGER_NOT_AVAILABLE")
+        assertEquals(p.ownedId.toString(), body(send(p.client, "POST", "/challenges/$challenger/recruit")).path("ownedPlayerId").asString())
+        assertEquals(1, roster(p).size())
+    }
+
+    @Test
+    fun `dismissal validates ownership location and rolls back atomically`() {
+        val p = player()
+        val other = player()
+        assertError(dismiss(other, p.ownedId), 403, "PLAYER_NOT_OWNED")
+        assertError(dismiss(p, UUID.randomUUID()), 404, "OWNED_PLAYER_NOT_FOUND")
+        assertError(
+            send(p.client, "POST", "/roster/${p.ownedId}/dismiss", """{"mapId":"benfica","x":-1,"y":640}""", UUID.randomUUID()),
+            400,
+            "VALIDATION_ERROR",
+        )
+        jdbc.update("UPDATE game_profile SET current_map_id = 'other' WHERE id = ?", p.profileId)
+        assertError(dismiss(p, p.ownedId), 400, "INVALID_DISMISSAL_LOCATION")
+        jdbc.update("UPDATE game_profile SET current_map_id = 'benfica' WHERE id = ?", p.profileId)
+        assertFailsWith<IllegalStateException> {
+            TransactionTemplate(transactions).execute {
+                dismissal.dismiss(
+                    p.profileId,
+                    p.ownedId,
+                    UUID.randomUUID(),
+                    com.streetfootball.game.roster
+                        .DismissalLocation("benfica", 704.0, 640.0),
+                )
+                error("force rollback")
+            }
+        }
+        assertEquals(1, roster(p).size())
+        assertEquals(0, body(get(p, "/maps/benfica/released-players")).size())
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM dismissal_command", Int::class.java))
+    }
+
+    private fun dismiss(
+        p: Player,
+        id: UUID,
+        key: UUID = UUID.randomUUID(),
+    ) = send(p.client, "POST", "/roster/$id/dismiss", """{"mapId":"benfica","x":704,"y":640}""", key)
+
+    @Test
+    fun `recruitment does not grant locked aliases without victories`() {
+        val p = player()
+        val alias = UUID.randomUUID()
+        jdbc.update(
+            "INSERT INTO challenger (id, player_definition_id, map_id, spawn_key, level) VALUES (?, 'npc_nilo_01', 'benfica', ?, 1)",
+            alias,
+            "fixture.$alias",
+        )
+        outcome = MatchOutcome.LOSS
+        body(send(p.client, "POST", "/challenges/$alias/matches", """{"ownedPlayerId":"${p.ownedId}"}""", UUID.randomUUID()))
+        outcome = MatchOutcome.WIN
+        body(duel(p))
+        body(recruit(p))
+        assertEquals(2, roster(p).size())
+        assertEquals("LOCKED", body(get(p, "/challenges/$alias")).path("recruitmentStatus").asString())
     }
 
     private fun fivePlayers(p: Player): List<UUID> {

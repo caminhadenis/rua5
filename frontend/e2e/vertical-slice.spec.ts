@@ -1,3 +1,5 @@
+import { startOpening, continueGame, finishStarterGuidance } from './helpers/opening'
+import { persistentRoster } from './helpers/roster'
 import { expect, test, type Page } from '@playwright/test'
 import { talkToStadiumCoach } from './stadiumHelpers'
 import type { DuelResponse, RosterPlayer, StadiumResponse } from '../src/api/gameApi'
@@ -7,7 +9,10 @@ async function state(page: Page) {
     const entry = '/src/main.ts'
     const { game } = await import(entry)
     const scene = game.scene.getScene('WorldScene')
-    return { x: scene.player.x as number, y: scene.player.y as number, dialogue: scene.hud.isDialogueOpen as boolean }
+    return { x: scene.player.x as number, y: scene.player.y as number, dialogue: scene.hud.isDialogueOpen as boolean,
+      interactable: scene.npcs.some((npc: { content: { kind: string }; sprite: { active: boolean; body: { center: { x: number; y: number } } } }) =>
+        npc.content.kind === 'challenger' && npc.sprite.active && Math.hypot(scene.player.body.center.x - npc.sprite.body.center.x,
+          scene.player.body.center.y - npc.sprite.body.center.y) <= 60) }
   })
 }
 
@@ -20,6 +25,8 @@ async function walk(page: Page, axis: 'x' | 'y', target: number, dialogue = fals
   try {
     await expect.poll(async () => {
       const current = await state(page)
+      // A challenger greeted during the previous return can be solid and already greeted.
+      if (dialogue && !current.dialogue && current.interactable) await page.keyboard.press('e', { delay: 80 })
       return (allowEarlyDialogue && current.dialogue) || (dialogue ? current.dialogue : positive ? current[axis] >= target - 4 : current[axis] <= target + 4)
     }, { timeout: 18_000, intervals: [20] }).toBe(true)
   } catch (error) {
@@ -32,11 +39,11 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
-  await page.getByRole('textbox', { name: 'Seu nome' }).fill('Jornada M7')
-  await page.getByRole('button', { name: 'Começar', exact: true }).click()
+  await startOpening(page, 'Jornada M7')
   await page.getByRole('button', { name: 'Confirmar cores', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Escolher / })).toHaveCount(3)
   await page.getByRole('button', { name: 'Escolher Aderlou' }).click()
+  await finishStarterGuidance(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   const roster = () => page.request.get('/api/v1/roster').then(r => r.json()) as Promise<RosterPlayer[]>
   const [starter] = await roster()
@@ -65,7 +72,8 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
     if (index === 3) {
       // The hedge west of Bia blocks the direct approach; follow the southern path.
       await walk(page, 'y', 752, false, true)
-      if (!(await state(page)).dialogue) await walk(page, 'x', 1216, true)
+      if (!(await state(page)).dialogue) await walk(page, 'x', 1232, false, true)
+      if (!(await state(page)).dialogue) await walk(page, 'y', 688, true)
     }
     await page.keyboard.press('Enter', { delay: 80 })
     let won = false
@@ -105,11 +113,15 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
   }
   const recruited = await roster()
   await page.reload()
+  await continueGame(page)
   await page.getByRole('button', { name: 'Equipe · T' }).click()
-  expect(await roster()).toEqual(recruited)
+  expect(persistentRoster(await roster())).toEqual(persistentRoster(recruited))
   await expect(page.getByRole('radio')).toHaveCount(5)
   await expect(page.locator('.lineup-slot')).toHaveCount(0)
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
+  // Bia patrols north/south: return below the hedge before heading west.
+  await walk(page, 'y', 752)
+  await walk(page, 'x', 1120)
   await walk(page, 'y', 336)
   await walk(page, 'x', 2128)
   await walk(page, 'y', 1320)
@@ -151,17 +163,17 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
   await page.getByRole('button', { name: 'Ver conquistas' }).click()
   await expect(page.getByRole('region', { name: 'Conquistas' })).toContainText('Taça do Benfica')
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   const completedRoster = await roster()
   await page.reload()
+  await continueGame(page)
   await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
-  expect(await roster()).toEqual(completedRoster)
+  expect(persistentRoster(await roster())).toEqual(persistentRoster(completedRoster))
   await page.getByRole('button', { name: 'Equipe · T' }).click()
   await expect(page.getByRole('region', { name: 'Conquistas' })).toContainText('Taça do Benfica')
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()
-  await walk(page, 'y', 336)
-  await walk(page, 'x', 2128)
-  await walk(page, 'y', 1320)
-  await walk(page, 'x', 1936)
+  // Continue restores the stadium doorstep; reenter directly from the saved position.
+  await expect(page.getByRole('button', { name: 'Equipe · T' })).toBeVisible()
   await page.keyboard.press('e', { delay: 80 })
   await talkToStadiumCoach(page)
   await expect(page.getByRole('status')).toContainText('Conquistado')
@@ -175,10 +187,10 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
 test('connection errors offer retry and sound preference survives reload', async ({ page }) => {
   await page.route('**/api/v1/profile', route => route.abort('failed'))
   await page.goto('/')
-  await expect(page.getByText('Não foi possível conectar ao jogo.')).toBeVisible()
+  await expect(page.getByText('Não foi possível consultar sua jornada salva.')).toBeVisible()
   await page.unroute('**/api/v1/profile')
   await page.getByRole('button', { name: 'Tentar novamente' }).click()
-  await expect(page.getByRole('button', { name: 'Começar', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'INICIAR', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Som: ligado' }).click()
   await page.reload()
   await expect(page.getByRole('button', { name: 'Som: desligado' })).toHaveAttribute('aria-pressed', 'false')

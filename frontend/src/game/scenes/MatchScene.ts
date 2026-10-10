@@ -1,4 +1,4 @@
-import { originalChallengerUrl, ownedPlayerEmotionUrl, ownedPlayerUniformUrl } from '../team/teamColors'
+import { DEFAULT_TEAM_COLORS, originalChallengerUrl, ownedPlayerEmotionUrl, ownedPlayerUniformUrl } from '../team/teamColors'
 import Phaser from 'phaser'
 import { gameAudio } from '../audio/GameAudio'
 import { request, type DuelResponse, type MatchEvent, type RosterPlayer, type StadiumResponse } from '../../api/gameApi'
@@ -9,6 +9,7 @@ import { onGoalArrival } from '../match/goalArrival'
 import { choreographyFor, type DuelAction, type DuelSide } from '../match/DuelChoreography'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 import { recruitmentPanel } from '../ui/RecruitmentPanel'
+import { fatigueReceiptText } from '../ui/fatigue'
 
 export class MatchScene extends Phaser.Scene {
   private result!: DuelResponse
@@ -31,6 +32,8 @@ export class MatchScene extends Phaser.Scene {
     this.finished = false
   }
   create(): void {
+    gameAudio.setMusic('duel')
+    gameAudio.play('whistle')
     this.panel = scenePanel(this, 'Partida')
     this.panel.classList.add('duel-panel')
     // Static markup only. All names and messages from the API are assigned with textContent.
@@ -59,7 +62,8 @@ export class MatchScene extends Phaser.Scene {
       this.panel.querySelector(`[data-player="${side}"]`)!.textContent = player.name
       this.panel.querySelector(`[data-level="${side}"]`)!.textContent = `Nv. ${player.level}`
       const duelist = this.panel.querySelector<HTMLElement>(`.duelist.${side}`)!
-      duelist.dataset.avatar = player.playerDefinitionId?.startsWith('npc_') || side === 'away' ? 'challenger' : 'player'
+      duelist.dataset.avatar = player.playerDefinitionId?.startsWith('starter_') ? 'player'
+        : player.playerDefinitionId?.startsWith('npc_') || side === 'away' ? 'challenger' : 'player'
       duelist.dataset.playerDefinitionId = player.playerDefinitionId ?? ''
       this.showEmotion(side, 'neutral')
     }
@@ -153,7 +157,8 @@ export class MatchScene extends Phaser.Scene {
     const homeUrl = !usesEmotionSheet
       ? ownedPlayerUniformUrl(playerDefinitionId)
       : ownedPlayerEmotionUrl(playerDefinitionId)
-    sprite.style.backgroundImage = `url("${side === 'home' ? homeUrl : originalChallengerUrl(playerDefinitionId)}")`
+    const awayUrl = usesEmotionSheet ? ownedPlayerEmotionUrl(playerDefinitionId, DEFAULT_TEAM_COLORS) : originalChallengerUrl(playerDefinitionId)
+    sprite.style.backgroundImage = `url("${side === 'home' ? homeUrl : awayUrl}")`
     sprite.style.backgroundSize = usesEmotionSheet ? '128px 160px' : (avatar === 'player' ? '256px 240px' : '64px 80px')
     sprite.style.backgroundPosition = !usesEmotionSheet
       ? (avatar === 'player' ? '0 -80px' : '0 0')
@@ -172,7 +177,9 @@ export class MatchScene extends Phaser.Scene {
     this.panel.classList.remove('is-goal')
     this.controls.replaceChildren()
     this.clock.textContent = 'FIM DO DUELO'
-    if (this.result!.match.outcome === 'WIN') gameAudio.play('win')
+    gameAudio.setMusic(null)
+    const outcomeCue = { WIN: 'win', LOSS: 'loss', DRAW: 'draw' } as const
+    gameAudio.play(this.stadium?.rewards.trophy ? 'trophy' : outcomeCue[this.result.match.outcome])
     const { match, rewards } = this.result
     this.showScore(match.homeScore, match.awayScore)
     const emotions = emotionsForOutcome(match.outcome)
@@ -194,6 +201,7 @@ export class MatchScene extends Phaser.Scene {
       const reward = paragraph(this.controls, `+${rewards.xpAwarded} XP · Nível ${rewards.currentLevel} · ${rewards.currentXp} / ${rewards.xpToNextLevel ?? 'máximo'} XP`)
       reward.dataset.testid = 'reward'
       reward.className = 'duel-reward'
+      if (rewards.fatigue) paragraph(this.controls, fatigueReceiptText(rewards.fatigue)).className = 'fatigue-status'
       if (rewards.currentLevel > rewards.previousLevel) paragraph(this.controls, `Subiu de nível! ${rewards.previousLevel} → ${rewards.currentLevel}`).className = 'level-up'
       const progress = rewards.challengerProgress
       paragraph(this.controls, `${progress.wins} V · ${progress.draws} E · ${progress.losses} D contra este adversário`).className = 'duel-history'

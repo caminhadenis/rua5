@@ -25,6 +25,18 @@ class StadiumPolicyTest {
     }
 
     @Test
+    fun `five owned athletes are mandatory but lineup slots are not`() {
+        for (count in 0L..4L) {
+            assertEquals(
+                "STADIUM_ROSTER_INCOMPLETE",
+                assertFailsWith<StadiumRuleException> { StadiumPolicy.validateRosterSize(count) }.code,
+            )
+        }
+        StadiumPolicy.validateRosterSize(5)
+        StadiumPolicy.validateRosterSize(9)
+    }
+
+    @Test
     fun `five opponents ordered by effective strength leave the best for last with stable ties`() {
         fun player(
             id: String,

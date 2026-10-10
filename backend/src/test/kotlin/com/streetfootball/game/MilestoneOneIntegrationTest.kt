@@ -184,6 +184,33 @@ class MilestoneOneIntegrationTest {
         }
     }
 
+    @Test
+    fun `new game creates a clean profile and retry recovers it without deleting previous progress`() {
+        val session = createProfile("Primeiro")
+        selectStarter(session, "starter_leo")
+        val key = UUID.randomUUID()
+
+        fun start(name: String = "Novo") =
+            mockMvc.perform(
+                post("/api/v1/profile/new-game")
+                    .session(session)
+                    .header("Idempotency-Key", key)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"displayName":"$name","primaryColor":"#2266aa","secondaryColor":"#dd3344"}"""),
+            )
+        val first = start().andExpect(status().isCreated).andExpect(jsonPath("$.starterSelected").value(false)).andReturn()
+        val newId =
+            first.response.contentAsString
+                .substringAfter("\"id\":\"")
+                .substringBefore('"')
+        start().andExpect(status().isCreated).andExpect(jsonPath("$.id").value(newId))
+        start("Outro").andExpect(status().isConflict).andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"))
+        mockMvc.perform(get("/api/v1/profile").session(session)).andExpect(jsonPath("$.id").value(newId))
+        mockMvc.perform(get("/api/v1/roster").session(session)).andExpect(jsonPath("$", hasSize<Any>(0)))
+        assertEquals(2, jdbcTemplate.queryForObject("SELECT count(*) FROM game_profile", Int::class.java))
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT count(*) FROM owned_player", Int::class.java))
+    }
+
     private fun createProfile(displayName: String): MockHttpSession {
         val result =
             mockMvc

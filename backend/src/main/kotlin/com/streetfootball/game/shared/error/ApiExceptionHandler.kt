@@ -6,7 +6,6 @@ import com.streetfootball.game.challenge.OwnedPlayerNotFoundException
 import com.streetfootball.game.challenge.PlayerNotOwnedException
 import com.streetfootball.game.profile.ProfileAlreadyExistsException
 import com.streetfootball.game.profile.ProfileNotFoundException
-import com.streetfootball.game.progression.TrainingCooldownException
 import com.streetfootball.game.progression.TrainingIdempotencyConflictException
 import com.streetfootball.game.progression.TrainingStatMaxException
 import com.streetfootball.game.recruitment.RecruitmentNotAvailableException
@@ -28,14 +27,28 @@ import java.util.UUID
 
 @RestControllerAdvice
 class ApiExceptionHandler {
-    @ExceptionHandler(TrainingCooldownException::class)
-    fun trainingCooldown(exception: TrainingCooldownException): ResponseEntity<ApiError> =
-        error(
-            HttpStatus.CONFLICT,
-            "TRAINING_COOLDOWN",
-            "Aguarde um minuto antes de treinar este atleta novamente.",
-            mapOf("nextAvailableAt" to exception.nextAvailableAt.toString()),
-        )
+    @ExceptionHandler(com.streetfootball.game.progression.RecoveryRuleException::class)
+    fun recoveryRule(exception: com.streetfootball.game.progression.RecoveryRuleException): ResponseEntity<ApiError> {
+        val message =
+            when (exception.code) {
+                "PLAYER_RECOVERING" -> "Este atleta está no Centro de Recuperação. Aguarde o tratamento ou interrompa-o no centro."
+                "PLAYER_ALREADY_RESTED" -> "Este atleta já está totalmente recuperado."
+                "RECOVERY_STATION_OCCUPIED" -> "Esta maca ou banho de gelo está ocupado. Escolha outro."
+                "RECOVERY_SESSION_CHANGED" -> "O tratamento mudou. Atualize o centro antes de tentar novamente."
+                "RECOVERY_STATION_NOT_FOUND" -> "Local de recuperação não encontrado."
+                else -> "Tratamento não encontrado."
+            }
+        val status = if (exception.code.endsWith("NOT_FOUND")) HttpStatus.NOT_FOUND else HttpStatus.CONFLICT
+        return error(status, exception.code, message)
+    }
+
+    @ExceptionHandler(com.streetfootball.game.roster.RosterFullException::class)
+    fun rosterFull(): ResponseEntity<ApiError> =
+        error(HttpStatus.CONFLICT, "ROSTER_FULL", "Seu time tem cinco jogadores. Dispense um atleta na Equipe para contratar outro.")
+
+    @ExceptionHandler(com.streetfootball.game.roster.InvalidDismissalLocationException::class)
+    fun invalidDismissalLocation(): ResponseEntity<ApiError> =
+        error(HttpStatus.BAD_REQUEST, "INVALID_DISMISSAL_LOCATION", "Escolha uma posição válida no mapa atual.")
 
     @ExceptionHandler(TrainingStatMaxException::class)
     fun trainingStatMax(): ResponseEntity<ApiError> =
@@ -49,6 +62,7 @@ class ApiExceptionHandler {
     fun stadiumRule(exception: com.streetfootball.game.stadium.StadiumRuleException): ResponseEntity<ApiError> {
         val message =
             when (exception.code) {
+                "STADIUM_ROSTER_INCOMPLETE" -> "Você precisa ter pelo menos cinco jogadores no elenco para desafiar o treinador."
                 "STADIUM_SEQUENCE_CHANGED" -> "A sequência avançou. Atualize o estádio antes de iniciar outro duelo."
                 "STADIUM_ALREADY_COMPLETED" -> "Este estádio já foi conquistado."
                 "STADIUM_REQUIREMENT_NOT_MET" -> "Conquiste os troféus necessários para entrar."

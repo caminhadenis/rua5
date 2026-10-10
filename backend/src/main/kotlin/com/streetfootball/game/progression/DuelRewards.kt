@@ -14,4 +14,5 @@ data class DuelRewards(
     val xpToNextLevel: Int?,
     val challengerProgress: ChallengerProgress,
     val recruitmentUnlocked: Boolean = false,
+    val fatigue: FatigueChange? = null,
 )

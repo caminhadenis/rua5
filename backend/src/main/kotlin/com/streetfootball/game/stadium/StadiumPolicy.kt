@@ -13,6 +13,12 @@ object StadiumPolicy {
         if (missingRequirements) throw StadiumRuleException("STADIUM_REQUIREMENT_NOT_MET")
     }
 
+    const val REQUIRED_ROSTER_SIZE = 5
+
+    fun validateRosterSize(count: Long) {
+        if (count < REQUIRED_ROSTER_SIZE) throw StadiumRuleException("STADIUM_ROSTER_INCOMPLETE")
+    }
+
     // Level first, then total effective attributes; stable IDs break equal-strength ties.
     fun orderedOpponents(players: List<MatchParticipant>): List<MatchParticipant> {
         if (players.size != 5) throw StadiumRuleException("STADIUM_LOCKED")

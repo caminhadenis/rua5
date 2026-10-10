@@ -15,6 +15,8 @@ import com.streetfootball.game.match.snapshot
 import com.streetfootball.game.profile.GameProfileEntity
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
+import com.streetfootball.game.progression.FatigueChange
+import com.streetfootball.game.progression.FatiguePolicy
 import com.streetfootball.game.progression.Progression
 import com.streetfootball.game.roster.OwnedPlayerRepository
 import com.streetfootball.game.roster.PlayerDefinitionRepository
@@ -36,6 +38,7 @@ data class PlayerAward(
     val previousXp: Int,
     val currentXp: Int,
     val xpToNextLevel: Int?,
+    val fatigue: FatigueChange? = null,
 )
 
 data class StadiumRewards(
@@ -157,13 +160,17 @@ class StadiumService(
         )
         val player = ownedPlayers.findById(command.ownedPlayerId).orElseThrow(::OwnedPlayerNotFoundException)
         if (player.profileId != profileId) throw PlayerNotOwnedException()
+        if (!player.rosterActive) throw OwnedPlayerNotFoundException()
         val definition = definitions.findById(player.playerDefinitionId).orElseThrow(::OwnedPlayerNotFoundException)
         if (!definition.enabled) throw OwnedPlayerNotFoundException()
+        StadiumPolicy.validateRosterSize(ownedPlayers.countByProfileId(profileId))
         val latest = series.latest(profileId, id)
         val round = if (latest == null || latest.finished) 1 else latest.played + 1
         if (command.seriesId != latest?.id || command.roundNumber != round) throw StadiumRuleException("STADIUM_SEQUENCE_CHANGED")
         val attempt = latest?.takeUnless { it.finished } ?: series.start(profileId, id, opponents(stadium))
-        val home = listOf(definition.snapshot(player.id.toString(), player.level, player))
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        player.requireAvailable(now)
+        val home = listOf(definition.snapshot(player.id.toString(), player.level, player, player.fatigueAt(now)))
         val input =
             MatchRequest(MatchMode.STADIUM_1V1, home, listOf(attempt.opponents[round - 1]), seeds.nextLong(), StadiumDuelEngine.VERSION)
         val started = System.nanoTime()
@@ -184,6 +191,7 @@ class StadiumService(
                         player.xp,
                         advanced.xp,
                         if (advanced.level < Progression.MAX_LEVEL) Progression.xpForNextLevel(advanced.level) else null,
+                        player.addFatigue(FatiguePolicy.DUEL_COST, now),
                     )
                 player.level = advanced.level
                 player.xp = advanced.xp
@@ -201,7 +209,7 @@ class StadiumService(
                 key,
                 input,
                 result,
-                Instant.now().truncatedTo(ChronoUnit.MICROS),
+                now,
                 stadiumId = id,
                 stadiumRewards = rewards,
                 seriesId = attempt.id,
