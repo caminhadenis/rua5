@@ -12,7 +12,18 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  session:
+    timeout: 7d
+    jdbc:
+      initialize-schema: never
+      cleanup-cron: "0 0 * * * *"
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${PORT:${SERVER_PORT:8080}}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        max-age: 7d
+        same-site: lax
 

@@ -1,6 +1,37 @@
 import { expect, test } from '@playwright/test'
 import { continueGame, startOpening } from './helpers/opening'
 
+for (const tour of [false, true]) {
+  test(`Miguel says goodbye with Amélia advice when exploring ${tour ? 'after the tour' : 'without the tour'}`, async ({ page }) => {
+    await page.goto('/')
+    await startOpening(page, 'Treinador visitante')
+    await page.getByRole('button', { name: 'Confirmar cores', exact: true }).click()
+    await page.getByRole('button', { name: 'Escolher Loraco', exact: true }).click()
+    const panel = page.getByRole('region', { name: 'Boas-vindas ao bairro' })
+    await expect(panel).not.toContainText('Dona Amélia')
+    await page.getByRole('button', { name: 'Próxima orientação', exact: true }).click()
+    await page.getByRole('button', { name: 'Próxima orientação', exact: true }).click()
+    if (tour) {
+      await page.getByRole('button', { name: 'Conhecer o centro de treinamento', exact: true }).click()
+      await expect(panel).toContainText('Chegamos ao Centro de Treinamento!', { timeout: 20_000 })
+      await expect(panel).not.toContainText('Dona Amélia')
+    }
+    await page.getByRole('button', { name: 'Explorar o bairro', exact: true }).click()
+    await expect(panel).toContainText('casa da Dona Amélia')
+    await expect(panel).toContainText('Boa sorte com seu time!')
+    await expect.poll(() => page.evaluate(async () => {
+      const { game } = await import('/src/main.ts')
+      return game.scene.getScene('WorldScene').choosing
+    })).toBe(true)
+    await page.getByRole('button', { name: 'Entendido, Miguel!', exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    await expect.poll(() => page.evaluate(async () => {
+      const { game } = await import('/src/main.ts')
+      return game.scene.isActive('WorldScene') && !game.scene.getScene('WorldScene').choosing && !game.scene.isActive('InteriorScene')
+    })).toBe(true)
+  })
+}
+
 for (const phone of [false, true]) {
   test.describe(phone ? 'phone neighborhood guidance' : 'desktop neighborhood guidance', () => {
     test.use({ viewport: phone ? { width: 844, height: 390 } : { width: 960, height: 540 },
@@ -16,11 +47,13 @@ for (const phone of [false, true]) {
       const panel = page.getByRole('region', { name: 'Boas-vindas ao bairro' })
       await expect(panel).toContainText('Parabéns pela escolha, Aderlou')
       await expect(panel).toContainText('marcação')
+      await expect(panel).not.toContainText('Dona Amélia')
       await page.getByRole('button', { name: 'Próxima orientação' }).click()
       await expect(panel).toContainText('menu Equipe, na seção Elenco')
       await page.getByRole('button', { name: 'Próxima orientação' }).click()
       await expect(panel).toContainText('subir o nível')
       await expect(panel).toContainText('sem ganhar XP')
+      await expect(panel).not.toContainText('Dona Amélia')
       await page.getByRole('button', { name: 'Conhecer o centro de treinamento' }).click()
       await expect(panel).toBeHidden()
       const minimap = page.getByRole('complementary', { name: 'Minimapa do Benfica' })
@@ -47,6 +80,9 @@ for (const phone of [false, true]) {
       expect(roster[0].level).toBe(1)
       await page.screenshot({ path: testInfo.outputPath('miguel-training-arrival.png') })
       await page.getByRole('button', { name: 'Entrar no centro de treinamento' }).click()
+      await expect(panel).toContainText('casa da Dona Amélia')
+      await expect(panel).toContainText('Professor Dimas')
+      await page.getByRole('button', { name: 'Entendido, Miguel!', exact: true }).click()
       await expect(minimap).toBeHidden()
       const active = (name: string) => page.evaluate(async name => {
         const { game } = await import('/src/main.ts')
@@ -122,6 +158,9 @@ test('all building entrances and exits cross automatically without bouncing back
       const { game } = await import('/src/main.ts')
       return game.scene.isActive('InteriorScene')
     }), { message: `Automatically enter ${key}` }).toBe(true)
+    if (key === 'benfica.house.01.entry') {
+      await page.getByRole('button', { name: 'Explorar a casa', exact: true }).click()
+    }
     await page.evaluate(async () => {
       const { game } = await import('/src/main.ts')
       const interior = game.scene.getScene('InteriorScene')

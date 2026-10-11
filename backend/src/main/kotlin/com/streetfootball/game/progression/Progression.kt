@@ -3,6 +3,7 @@ package com.streetfootball.game.progression
 import com.streetfootball.game.match.domain.MatchOutcome
 import com.streetfootball.game.match.domain.MatchStats
 import kotlin.math.pow
+import kotlin.math.round
 import kotlin.math.roundToInt
 
 /** MVP balancing, independent of persistence and HTTP. XP is the remainder in the current level. */
@@ -64,7 +65,7 @@ object Progression {
         fun grow(
             stat: Double,
             bonus: Double,
-        ) = (stat + growth + bonus).coerceIn(1.0, 99.0)
+        ) = (round((stat + growth + bonus) * 100) / 100).coerceIn(1.0, 99.0)
         return MatchStats(
             grow(base.speed, bonuses.speed),
             grow(base.dribbling, bonuses.dribbling),

@@ -2,7 +2,6 @@ import Phaser from 'phaser'
 import { ApiError, TrainingCommand, teamApi, type RosterPlayer, type TrainingFocus, type TrainingResult } from '../../api/gameApi'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 import { PlayerCards } from '../ui/PlayerCards'
-import { fatigueReceiptText } from '../ui/fatigue'
 import { TRAINING_SECTORS } from '../maps/trainingCenter'
 import { TRAINING_DURATION_MS, trainingStage } from './TrainingStage'
 
@@ -31,29 +30,20 @@ export async function openTrainingPanel(
       const title = document.createElement('h2')
       title.textContent = `Setor de ${label}`
       panel.append(title)
-      paragraph(panel, 'Cada treino dá +0,25 neste fundamento, até 99. Você pode repetir assim que a sessão terminar. Cada treino gera +12 de desgaste.').className = 'selection-description'
-      const cards = new PlayerCards(roster)
+      paragraph(panel, 'Escolha um atleta.').className = 'selection-description'
+      const cards = new PlayerCards(roster, false, { compact: true })
       panel.append(cards.element)
       const stageHolder = document.createElement('div')
       stageHolder.className = 'training-stage-holder'
       panel.append(stageHolder)
       const focusedPlayer = () => roster.find(player => player.id === cards.selectedId)
-      const renderProgress = () => {
-        const display = stageHolder.querySelector<HTMLElement>('.training-progress')
-        const player = focusedPlayer()
-        if (display && player) {
-          const stat = player.stats[focus.toLowerCase() as keyof RosterPlayer['stats']]
-          display.textContent = `${label} · ${stat.toLocaleString('pt-BR')}/99 · ${stat < 99 ? '+0,25 por treino' : 'máximo atingido'}`
-        }
-      }
       const renderStage = () => {
         stageHolder.replaceChildren()
         const player = focusedPlayer()
         if (player) stageHolder.append(trainingStage(player, focus))
-        renderProgress()
       }
       renderStage()
-      const status = paragraph(panel, 'O treino melhora este atributo. Nível e XP aumentam com partidas.')
+      const status = paragraph(panel, 'Pronto para treinar.')
       status.setAttribute('role', 'status')
       const actions = document.createElement('div')
       actions.className = 'selection-actions'
@@ -96,17 +86,12 @@ export async function openTrainingPanel(
           try {
             // If roster refresh fails after a confirmed command, retry only the refresh.
             confirmedResult ??= await command.train(selectedPlayerId!, focus)
-            const result = confirmedResult
             const updated = await teamApi.roster()
             if (!panel.isConnected || !scene.scene.isActive()) return
             roster = updated
             cards.updateFatigue(updated)
             onRosterUpdated(updated)
-            renderProgress()
-            status.textContent = result.statAfter !== null && result.statBefore !== null && result.statAfter !== result.statBefore
-              ? `${label}: ${result.statBefore.toLocaleString('pt-BR')} → ${result.statAfter.toLocaleString('pt-BR')} para ${roster.find(player => player.id === result.ownedPlayerId)!.name}!`
-              : 'Treino anterior recuperado. Confira o elenco.'
-            if (result.fatigue) status.textContent += ` ${fatigueReceiptText(result.fatigue)}.`
+            status.textContent = 'Treino concluído!'
             confirmedResult = undefined
             selectedPlayerId = undefined
             busy = false

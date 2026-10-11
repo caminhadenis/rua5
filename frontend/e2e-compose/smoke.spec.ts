@@ -1,7 +1,8 @@
+import { finishedDuel } from '../e2e/helpers/coachedMatch'
 import { startOpening, continueGame, finishStarterGuidance } from '../e2e/helpers/opening'
 import { persistentRoster } from '../e2e/helpers/roster'
 import { expect, test } from '@playwright/test'
-import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
+import type { RosterPlayer } from '../src/api/gameApi'
 
 test('compiled client → same-origin API/session → real duel → persisted reward → reload', async ({ page }) => {
   test.setTimeout(45_000)
@@ -19,10 +20,11 @@ test('compiled client → same-origin API/session → real duel → persisted re
   await page.waitForTimeout(6000)
   await page.keyboard.up('ArrowRight')
   await page.keyboard.press('Enter', { delay: 80 })
-  const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/matches'))
+  const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar desafio' }).click()
-  const result = await (await response).json() as DuelResponse
+  const initial = await (await response).json()
   await page.getByRole('button', { name: 'Pular', exact: true }).click()
+  const result = await finishedDuel(page, initial.match.id)
   await expect(page.getByTestId('reward')).toContainText(`+${result.rewards!.xpAwarded} XP`)
   const roster = await (await page.request.get('/api/v1/roster')).json() as RosterPlayer[]
   expect(roster).toHaveLength(1)

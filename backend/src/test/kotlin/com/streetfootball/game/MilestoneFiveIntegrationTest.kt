@@ -250,8 +250,11 @@ class MilestoneFiveIntegrationTest {
                 ),
             )
             assertEquals(
-                25,
-                upgrade.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success AND type = 'SQL'", Int::class.java),
+                3,
+                upgrade.queryForObject(
+                    "SELECT count(*) FROM flyway_schema_history WHERE success AND version IN ('27', '28', '29')",
+                    Int::class.java,
+                ),
             )
         }
     }
@@ -441,7 +444,7 @@ class MilestoneFiveIntegrationTest {
         val other = player()
         duel(p)
         val nilo = UUID.fromString(body(recruit(p)).path("ownedPlayerId").asString())
-        jdbc.update("UPDATE owned_player SET level = 6, xp = 17, training_speed = 7 WHERE id = ?", nilo)
+        jdbc.update("UPDATE owned_player SET level = 6, xp = 17, training_speed = 175 WHERE id = ?", nilo)
         putLineup(p, listOf(nilo, null, null, null, null))
         val prior = roster(p).toList().single { it.path("id").asString() == nilo.toString() }
         val key = UUID.randomUUID()

@@ -1,3 +1,4 @@
+import { finishedDuel, presentHistoricalMatch } from './helpers/coachedMatch'
 import { persistentRoster } from './helpers/roster'
 import { startOpening, continueGame, finishStarterGuidance } from './helpers/opening'
 import { expect, test, type Page } from '@playwright/test'
@@ -50,15 +51,20 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   await expect(page.locator('select')).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('player-selection.png') })
   let commands = 0
-  page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/matches')) commands++ })
-  const resultPromise = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/matches'))
+  page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/coached-matches')) commands++ })
+  const resultPromise = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar desafio' }).click()
   const response = await resultPromise
   expect(response.ok()).toBe(true)
-  const result = await response.json() as DuelResponse
+  const initial = await response.json()
+  expect(initial.match.outcome).toBeNull()
+  expect(initial.rewards).toBeNull()
   await expect(page.locator('.scene-transition')).toHaveCount(1)
   await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
   await expect(page.locator('.duelist.home .duel-sprite')).toHaveCSS('background-image', /d8a83e/)
+  const firstStep = page.waitForResponse(r => r.url().endsWith('/advance'))
+  await page.getByRole('button', { name: 'Continuar partida' }).click()
+  let result = await (await firstStep).json() as DuelResponse
   await expect(page.getByTestId('current-event')).toHaveAttribute('data-sequence', /[1-9]/)
   const visible = await page.evaluate(() => ({
     sequence: Number(document.querySelector<HTMLElement>('[data-testid="current-event"]')!.dataset.sequence),
@@ -76,6 +82,7 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   await page.getByRole('button', { name: 'Acelerar · 1×' }).click()
   await expect(page.getByRole('button', { name: 'Acelerar · 4×' })).toBeVisible()
   await page.getByRole('button', { name: 'Pular', exact: true }).click()
+  result = await finishedDuel(page, result.match.id)
   await expect(page.getByTestId('match-result')).toContainText(`${result.match.homeScore} × ${result.match.awayScore}`)
   await expect(page.getByTestId('reward')).toContainText(`+${result.rewards!.xpAwarded} XP`)
   await expect(page.getByTestId('home-score')).toHaveText(String(result.match.homeScore))
@@ -102,13 +109,14 @@ test('starter → NPC → real API → timeline → speed/skip → persisted rew
   await page.screenshot({ path: testInfo.outputPath('post-match-dialogue.png') })
   await page.keyboard.press('Enter', { delay: 80 })
   await expect(page.getByRole('button', { name: 'Iniciar desafio' })).toBeVisible()
-  const rematchPromise = page.waitForResponse(response => response.url().includes('/matches'))
+  const rematchPromise = page.waitForResponse(response => response.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar desafio' }).click()
-  const rematch = await (await rematchPromise).json() as DuelResponse
+  let rematch = await (await rematchPromise).json() as DuelResponse
   expect(rematch.match.id).not.toBe(result.match.id)
-  expect(rematch.rewards!.challengerProgress.attempts).toBe(2)
   await expect(page.getByTestId('reward')).toHaveCount(0)
   await page.getByRole('button', { name: 'Pular', exact: true }).click()
+  rematch = await finishedDuel(page, rematch.match.id)
+  expect(rematch.rewards!.challengerProgress.attempts).toBe(2)
   await expect(page.getByTestId('reward')).toContainText(`+${rematch.rewards!.xpAwarded} XP`)
   await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
   const latestRoster = await (await page.request.get('/api/v1/roster')).json()
@@ -134,7 +142,7 @@ test('lost response retries the same command and normal completion grants no add
   await walkToNpc(page)
   const keys: string[] = []
   let original: DuelResponse | undefined
-  await page.route('**/challenges/*/matches', async route => {
+  await page.route('**/challenges/*/coached-matches', async route => {
     keys.push(route.request().headers()['idempotency-key']!)
     const response = await route.fetch()
     if (!original) {
@@ -148,10 +156,13 @@ test('lost response retries the same command and normal completion grants no add
   await page.getByRole('button', { name: 'Iniciar desafio' }).click()
   await expect(page.getByRole('radio')).toBeDisabled()
   await page.getByRole('button', { name: 'Tentar novamente', exact: true }).click()
+  await page.getByLabel('Pausar para orientar').uncheck()
+  await page.getByRole('button', { name: 'Continuar partida' }).click()
   await page.getByRole('button', { name: 'Acelerar · 1×' }).click()
   await expect(page.getByTestId('reward')).toBeVisible({ timeout: 25_000 })
   expect(keys).toHaveLength(2)
   expect(keys[0]).toBe(keys[1])
+  original = await finishedDuel(page, original!.match.id)
   await expect(page.getByTestId('home-score')).toHaveText(String(original!.match.homeScore))
   await expect(page.getByTestId('away-score')).toHaveText(String(original!.match.awayScore))
   await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
@@ -181,8 +192,8 @@ test('player cards support mouse and keyboard and send the chosen owned player',
   await page.keyboard.press('ArrowRight')
   await expect(cora).toBeChecked()
   await page.screenshot({ path: testInfo.outputPath('roster-cards.png') })
-  await page.route('**/challenges/*/matches', route => route.fulfill({ status: 400, json: { code: 'PLAYER_NOT_OWNED' } }))
-  const sent = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/matches'))
+  await page.route('**/challenges/*/coached-matches', route => route.fulfill({ status: 400, json: { code: 'PLAYER_NOT_OWNED' } }))
+  const sent = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar desafio' }).click()
   expect((await sent).postDataJSON()).toEqual({ ownedPlayerId: roster[1]!.id })
   await page.getByRole('button', { name: 'Voltar', exact: true }).click()
@@ -213,8 +224,7 @@ test('challenger reacts to each server outcome and offers a rematch', async ({ p
           homeScore: entry.homeScore, awayScore: entry.awayScore }],
       }, rewards: null,
     }
-    await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
-    await page.getByRole('button', { name: 'Iniciar desafio' }).click()
+    await presentHistoricalMatch(page, result)
     await page.getByRole('button', { name: 'Pular', exact: true }).click()
     await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
     await expect.poll(async () => (await dialogueState(page)).open).toBe(true)
@@ -249,8 +259,7 @@ test('goal raises the scorer arms, holds the caption and shows winner and loser 
     },
     rewards: null,
   }
-  await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
-  await page.getByRole('button', { name: 'Iniciar desafio' }).click()
+  await presentHistoricalMatch(page, result)
   await page.getByRole('button', { name: 'Acelerar · 1×' }).click()
   await expect.poll(() => page.locator('.duel-ball').getAttribute('data-shot'), { intervals: [20] }).toBe('home')
   expect(await page.getByTestId('current-event').textContent()).not.toContain('GOL!')
@@ -283,8 +292,7 @@ test('both teams shoot into their net and a missed shot stays outside', async ({
       away: [{ playerId: 'away', name: 'Nilo', level: 1 }], homeScore: 1, awayScore: 1,
       outcome: 'DRAW', events }, rewards: null,
   }
-  await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
-  await page.getByRole('button', { name: 'Iniciar desafio' }).click()
+  await presentHistoricalMatch(page, result)
   await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
   const show = async (event: MatchEvent) => page.evaluate(async shot => {
     const { game } = await import('/src/main.ts')
@@ -349,8 +357,7 @@ test('duel events move the athletes, carry the ball, dribble and tackle', async 
     },
     rewards: null,
   }
-  await page.route('**/challenges/*/matches', route => route.fulfill({ json: result }))
-  await page.getByRole('button', { name: 'Iniciar desafio' }).click()
+  await presentHistoricalMatch(page, result)
   await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
   await expect(page.locator('.duelist.away .duel-sprite')).toHaveCSS('background-image', /challenger-curls/)
   const show = async (shot: MatchEvent) => page.evaluate(async event => {

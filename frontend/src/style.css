@@ -502,12 +502,32 @@ button:focus-visible, select:focus-visible { outline: 3px solid #f7d154; }
   .stadium-fan, .fan-arm, .fan-flag, .stadium-support-banner { animation: none; }
 }
 
-.player-card-fatigue { font-size: .72rem; line-height: 1.2; color: #ffe09a; overflow-wrap: anywhere; }
+.player-card-fatigue { width: 100%; justify-content: center; font-size: .72rem; line-height: 1.2; color: #ffe09a; overflow-wrap: anywhere; }
+.energy-indicator { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; max-width: 100%; }
+.energy-battery {
+  --energy-color: #68c781;
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 80px;
+  max-width: calc(100% - 5px);
+  min-width: 24px;
+  flex: 0 1 80px;
+  height: 16px;
+  margin-right: 5px;
+  padding: 2px;
+  border: 2px solid var(--energy-color);
+  background: #0c171f;
+}
+.energy-battery::after { content: ''; position: absolute; right: -5px; top: 3px; width: 3px; height: 6px; background: var(--energy-color); }
+.energy-battery[data-condition="TIRED"] { --energy-color: #e9c65a; }
+.energy-battery[data-condition="VERY_TIRED"] { --energy-color: #ed9753; }
+.energy-battery[data-condition="EXHAUSTED"] { --energy-color: #dc6464; }
+.energy-fill { display: block; width: var(--energy-level, 100%); height: 100%; background: var(--energy-color); transition: width 180ms ease; }
+@media (prefers-reduced-motion: reduce) { .energy-fill { transition: none; } }
 .fatigue-status { color: #ffe09a; font-size: .85rem; margin: .3rem 0; }
 .fatigue-recovery { color: #ced4df; font-size: .75rem; margin: .2rem 0; }
 @media (max-height: 500px) { .player-card-fatigue { font-size: .65rem; } .fatigue-status, .fatigue-recovery { margin: .15rem 0; } }
-
-.fatigue-compact { display: none; }
 
 /* The clinic uses the existing accessible athlete selection shell. */
 .recovery-panel .selection-actions { display: flex; gap: 12px; flex-wrap: wrap; }

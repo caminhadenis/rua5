@@ -12,7 +12,10 @@ import { INTERIORS, type InteriorLocation } from '../maps/locations'
 import { RECOVERY_STATIONS, type RecoveryStation } from '../maps/recoveryCenter'
 import { RecoveryCenterArt } from '../maps/RecoveryCenterArt'
 import { openRecoveryPanel } from '../ui/RecoveryPanel'
-import { TRAINING_SECTORS } from '../maps/trainingCenter'
+import { TRAINING_INTRO, TRAINING_SECTORS } from '../maps/trainingCenter'
+import { TACTICS_BOARD, TACTICS_HOUSE_KEY } from '../maps/tacticsRoom'
+import { drawTacticsRoom } from '../maps/TacticsRoomArt'
+import { TacticsVisit } from '../ui/TacticsVisit'
 import { openTrainingPanel } from '../training/TrainingPanel'
 import { trackLocation } from '../save/location'
 import { button } from '../ui/ScenePanel'
@@ -22,11 +25,12 @@ import type { TrainingFocus } from '../../api/gameApi'
 export class InteriorScene extends Phaser.Scene {
   player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
   private location!: InteriorLocation
-  private people: { name: string; dialogue: string; role?: 'trainer' | 'stadium-coach' | 'supporter' | 'physiotherapist' | 'masseur'; focus?: TrainingFocus; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody }[] = []
+  private people: { name: string; dialogue: string; role?: InteriorLocation['people'][number]['role']; focus?: TrainingFocus; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody }[] = []
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'T' | 'ENTER' | 'ESC', Phaser.Input.Keyboard.Key>
   private walk!: PlayerWalkAnimation
   private dialogue?: Phaser.GameObjects.Container
+  private dialoguePages?: { name: string; role: string; words: string[]; index: number }
   private dialogueFocus?: TrainingFocus
   private trainingOpen = false
   private stadiumId = 'benfica_stadium'
@@ -39,6 +43,9 @@ export class InteriorScene extends Phaser.Scene {
   private recoveryHint?: Phaser.GameObjects.Text
   private instructions?: Phaser.GameObjects.Text
   private refreshingRecovery = false
+  private tacticsVisit?: TacticsVisit
+  private tacticsHint?: Phaser.GameObjects.Text
+  private teamButton?: HTMLButtonElement
 
   constructor() { super('InteriorScene') }
 
@@ -62,7 +69,10 @@ export class InteriorScene extends Phaser.Scene {
     this.checkingCoach = false
     this.dialogueFocus = undefined
     this.dialogue = undefined
+    this.dialoguePages = undefined
     this.dialogueCoach = false
+    this.tacticsVisit = undefined
+    this.tacticsHint = undefined
     const width = this.scale.width
     const height = this.scale.height
     this.add.rectangle(width / 2, height / 2, width, height, this.location.wallColor)
@@ -139,6 +149,10 @@ export class InteriorScene extends Phaser.Scene {
     }
     if (this.location.kind === 'gym') this.drawTrainingCenter()
     if (this.location.kind === 'stadium') this.drawStadium()
+    if (this.location.key === TACTICS_HOUSE_KEY) {
+      drawTacticsRoom(this, this.player)
+      this.tacticsHint = this.add.text(480, 520, '', { fontFamily: 'monospace', fontSize: '15px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(99)
+    }
     const residents = this.location.kind === 'gym'
       ? [...this.location.people, ...TRAINING_SECTORS.map(sector => ({
         name: sector.coach, dialogue: sector.dialogue, role: 'trainer' as const, focus: sector.focus,
@@ -146,12 +160,13 @@ export class InteriorScene extends Phaser.Scene {
       }))]
       : this.location.people
     this.people = residents.map((person, index) => {
-      const sprite = this.physics.add.staticImage(person.x, person.y, person.sprite)
+      const sprite = this.physics.add.staticImage(person.x, person.y, person.role === 'tactics-coach' ? `walking-${person.sprite}` : person.sprite,
+        person.role === 'tactics-coach' ? 'front-0' : undefined)
       sprite.body.setSize(18, 14).setOffset(7, 26)
       sprite.setDepth(person.y)
       if (person.role === 'supporter') sprite.setTint(0xe9b3a2)
       this.physics.add.collider(this.player, sprite)
-      this.tweens.add({ targets: sprite, y: person.y - 2, duration: 700 + index * 230, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+      if (person.role !== 'tactics-coach') this.tweens.add({ targets: sprite, y: person.y - 2, duration: 700 + index * 230, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
       return { ...person, sprite }
     })
     const keyboard = this.input.keyboard!
@@ -164,13 +179,15 @@ export class InteriorScene extends Phaser.Scene {
     })
     this.mobileDialogue = new MobileDialogue(this)
     const team = button(document.getElementById('game')!, 'Equipe · T', () => this.openTeam())
+    this.teamButton = team
     team.className = 'world-team-button'
     const hideTeam = () => { team.hidden = true }
     const showTeam = () => { team.hidden = false }
     this.events.on(Phaser.Scenes.Events.SLEEP, hideTeam)
     this.events.on(Phaser.Scenes.Events.WAKE, showTeam)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { team.remove(); this.events.off(Phaser.Scenes.Events.SLEEP, hideTeam); this.events.off(Phaser.Scenes.Events.WAKE, showTeam) })
-    const animate = (_time: number, delta: number) => this.walk.update(Boolean(this.dialogue?.visible), delta)
+    const animate = (_time: number, delta: number) => this.walk.update(Boolean(this.dialogue?.visible) || Boolean(this.tacticsVisit?.active && !this.tacticsVisit.walking), delta,
+      this.tacticsVisit?.walking || Boolean(this.player.body.velocity.x || this.player.body.velocity.y))
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, animate)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, animate))
     const resetInput = () => this.input.keyboard?.resetKeys()
@@ -178,11 +195,28 @@ export class InteriorScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.WAKE, resetInput))
     if (this.location.kind === 'gym') {
       const trainer = this.people.find(person => person.role === 'trainer' && !person.focus)
-      if (trainer) this.showDialogue(trainer.name, trainer.dialogue, 'Treinadora')
+      if (trainer) this.showDialogue(trainer.name, TRAINING_INTRO, 'Treinadora')
+    }
+    const tacticsCoach = this.people.find(person => person.role === 'tactics-coach')
+    if (tacticsCoach) {
+      this.tacticsVisit = new TacticsVisit(this, this.player, tacticsCoach.sprite, this.location, () => {
+        this.touch.reset()
+        this.walk.stop()
+      })
+      this.tacticsVisit.welcome()
     }
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
+    if (this.teamButton) this.teamButton.hidden = Boolean(this.tacticsVisit?.active)
+    if (this.tacticsVisit?.active) {
+      this.touch.setContext({ visible: false })
+      this.player.setVelocity(0, 0)
+      this.instructions?.setVisible(false)
+      this.tacticsHint?.setVisible(false)
+      this.tacticsVisit.update(delta)
+      return
+    }
     if (this.trainingOpen || this.checkingCoach || isPhonePortrait()) {
       this.touch.setContext({ visible: false })
       this.player.setVelocity(0, 0)
@@ -195,13 +229,15 @@ export class InteriorScene extends Phaser.Scene {
       ? RECOVERY_STATIONS.filter(item => canInteract(this.player.body.center, item)).sort((a, b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) - Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y))[0]
       : undefined
     const dialogueOpen = Boolean(this.dialogue?.visible)
+    const nearMural = this.location.key === TACTICS_HOUSE_KEY && canInteract(this.player.body.center, TACTICS_BOARD)
+    this.tacticsHint?.setText(nearMural && !dialogueOpen ? 'E / Enter · Consultar mural' : '').setVisible(!isPhone() && nearMural && !dialogueOpen)
     this.recoveryHint?.setText(!dialogueOpen && station ? `${station.label} · ${isPhone() ? 'toque em Recuperar' : 'E / Enter para escolher jogador'}` : '').setVisible(Boolean(!isPhone() && !dialogueOpen && station))
-    this.instructions?.setVisible(!isPhone() && !(this.location.kind === 'recovery' && station && !dialogueOpen))
+    this.instructions?.setVisible(!isPhone() && !(this.location.kind === 'recovery' && station && !dialogueOpen) && !(nearMural && !dialogueOpen))
     const nearExit = Math.hypot(this.player.body.center.x - 480, this.player.body.center.y - 475) <= 24
     this.touch.setContext({
       visible: true, movement: !dialogueOpen, team: true,
       confirm: dialogueOpen ? this.dialogueCoach ? 'Desafiar' : this.dialogueFocus ? 'Treinar' : 'Continuar'
-        : nearExit ? 'Sair' : station ? 'Recuperar' : nearby ? 'Conversar' : undefined,
+        : nearExit ? 'Sair' : nearMural ? 'Ler mural' : station ? 'Recuperar' : nearby ? 'Conversar' : undefined,
       back: dialogueOpen ? 'Fechar' : 'Sair',
     })
     if (Phaser.Input.Keyboard.JustDown(this.keys.T) || this.touch.input.consume('team')) { this.openTeam(); return }
@@ -212,6 +248,11 @@ export class InteriorScene extends Phaser.Scene {
     const escape = Phaser.Input.Keyboard.JustDown(this.keys.ESC) || back
     if (this.dialogue?.visible) {
       this.player.setVelocity(0, 0)
+      if (!escape && (enter || interact) && this.dialoguePages && this.dialoguePages.index < this.dialoguePages.words.length - 1) {
+        this.dialoguePages.index++
+        this.renderDialogue(this.dialoguePages.name, this.dialoguePages.words[this.dialoguePages.index]!, this.dialoguePages.role)
+        return
+      }
       if (enter && this.dialogueCoach) {
         this.dialogue.setVisible(false)
         this.mobileDialogue.close()
@@ -231,7 +272,7 @@ export class InteriorScene extends Phaser.Scene {
         this.input.keyboard!.resetKeys()
         const world = this.scene.get('WorldScene')
         void openTrainingPanel(this, focus, () => {
-                this.trainingOpen = false
+          this.trainingOpen = false
           this.checkingCoach = false
           this.input.keyboard?.resetKeys()
         }, roster => world.events.emit('roster-updated', roster))
@@ -242,6 +283,7 @@ export class InteriorScene extends Phaser.Scene {
         this.mobileDialogue.close()
         this.dialogueFocus = undefined
         this.dialogueCoach = false
+        this.dialoguePages = undefined
       }
       return
     }
@@ -253,6 +295,15 @@ export class InteriorScene extends Phaser.Scene {
       this.openRecovery(station)
       return
     }
+    if ((interact || enter) && (nearMural || nearby?.role === 'tactics-coach')) {
+      this.player.setVelocity(0, 0)
+      this.touch.reset()
+      this.walk.stop()
+      this.mobileDialogue.close()
+      if (nearMural) this.tacticsVisit?.read()
+      else this.tacticsVisit?.welcome()
+      return
+    }
     if ((interact || enter) && nearby) {
       this.player.setVelocity(0, 0)
       this.dialogueFocus = nearby.focus
@@ -261,7 +312,7 @@ export class InteriorScene extends Phaser.Scene {
         return
       }
       this.dialogueCoach = false
-      this.showDialogue(nearby.name, nearby.dialogue, nearby.role === 'supporter' ? 'Torcedor do time de Dimas'
+      this.showDialogue(nearby.name, this.location.kind === 'gym' && nearby.role === 'trainer' && !nearby.focus ? TRAINING_INTRO : nearby.dialogue, nearby.role === 'supporter' ? 'Torcedor do time de Dimas'
         : nearby.role === 'trainer' || this.dialogueCoach ? 'Treinador(a)'
           : nearby.role === 'physiotherapist' ? 'Fisioterapia' : nearby.role === 'masseur' ? 'Massagem' : 'Morador')
       return
@@ -321,10 +372,16 @@ export class InteriorScene extends Phaser.Scene {
     } finally { this.checkingCoach = false }
   }
 
-  private showDialogue(name: string, words: string, role: string): void {
+  private showDialogue(name: string, words: string | string[], role: string): void {
+    this.dialoguePages = Array.isArray(words) ? { name, role, words, index: 0 } : undefined
+    this.renderDialogue(name, Array.isArray(words) ? words[0]! : words, role)
+  }
+
+  private renderDialogue(name: string, words: string, role: string): void {
     if (this.dialogue) this.dialogue.destroy()
     const invitation = this.dialogueFocus ? '\nQuer treinar este fundamento?' : ''
-    const prompt = this.dialogueCoach ? 'Enter para desafiar · E / Esc para fechar'
+    const prompt = this.dialoguePages ? `Enter / E para ${this.dialoguePages.index < this.dialoguePages.words.length - 1 ? 'continuar' : 'concluir'} · Esc para fechar`
+      : this.dialogueCoach ? 'Enter para desafiar · E / Esc para fechar'
       : this.dialogueFocus ? 'Clique Enter para treinar · E / Esc para fechar' : 'Enter / E / Esc para fechar'
     const background = this.add.rectangle(0, 0, 912, 94, 0x152b32).setOrigin(0).setStrokeStyle(3, 0xf7d154)
     const text = this.add.text(18, 9, `${name} · ${role}\n${words}${invitation}\n${prompt}`, {
@@ -391,7 +448,7 @@ export class InteriorScene extends Phaser.Scene {
   }
 
   private openTeam(): void {
-    if (this.trainingOpen || this.checkingCoach || !this.scene.isActive()) return
+    if (this.trainingOpen || this.checkingCoach || this.tacticsVisit?.active || !this.scene.isActive()) return
     this.player.setVelocity(0, 0)
     this.walk.stop()
     this.touch.reset()

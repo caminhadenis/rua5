@@ -37,15 +37,15 @@ class OwnedPlayerEntity(
     @field:Column(nullable = false)
     var losses: Int = 0,
     @field:Column(name = "training_speed", nullable = false)
-    var trainingSpeedQuarters: Int = 0,
+    var trainingSpeedHundredths: Int = 0,
     @field:Column(name = "training_dribbling", nullable = false)
-    var trainingDribblingQuarters: Int = 0,
+    var trainingDribblingHundredths: Int = 0,
     @field:Column(name = "training_finishing", nullable = false)
-    var trainingFinishingQuarters: Int = 0,
+    var trainingFinishingHundredths: Int = 0,
     @field:Column(name = "training_defending", nullable = false)
-    var trainingDefendingQuarters: Int = 0,
+    var trainingDefendingHundredths: Int = 0,
     @field:Column(name = "training_physical", nullable = false)
-    var trainingPhysicalQuarters: Int = 0,
+    var trainingPhysicalHundredths: Int = 0,
     @field:Column(name = "recruited_at", nullable = false)
     var recruitedAt: Instant = Instant.now(),
     @field:Column(nullable = false)
@@ -99,23 +99,39 @@ class OwnedPlayerEntity(
         return change
     }
 
-    // Integer quarter points preserve exact gains and previously earned whole-point bonuses.
+    fun finishCoachedFatigue(
+        initial: Double,
+        cost: Int,
+        now: Instant,
+    ): FatigueChange {
+        val change = FatiguePolicy.add(initial, cost, now).copy(policyVersion = "2")
+        clearRecovery()
+        fatigue = change.after.value
+        fatigueUpdatedAt = now
+        return change
+    }
+
+    // Integer hundredths preserve all earned bonuses without accumulating floating-point error.
     fun trainingBonuses() =
         StatBonuses(
-            trainingSpeedQuarters * TrainingPolicy.STAT_GAIN,
-            trainingDribblingQuarters * TrainingPolicy.STAT_GAIN,
-            trainingFinishingQuarters * TrainingPolicy.STAT_GAIN,
-            trainingDefendingQuarters * TrainingPolicy.STAT_GAIN,
-            trainingPhysicalQuarters * TrainingPolicy.STAT_GAIN,
+            trainingSpeedHundredths / TrainingPolicy.UNITS_PER_POINT.toDouble(),
+            trainingDribblingHundredths / TrainingPolicy.UNITS_PER_POINT.toDouble(),
+            trainingFinishingHundredths / TrainingPolicy.UNITS_PER_POINT.toDouble(),
+            trainingDefendingHundredths / TrainingPolicy.UNITS_PER_POINT.toDouble(),
+            trainingPhysicalHundredths / TrainingPolicy.UNITS_PER_POINT.toDouble(),
         )
 
-    fun increaseTraining(focus: TrainingFocus) {
+    fun increaseTraining(
+        focus: TrainingFocus,
+        units: Int,
+    ) {
+        require(units in 1..25)
         when (focus) {
-            TrainingFocus.SPEED -> trainingSpeedQuarters++
-            TrainingFocus.DRIBBLING -> trainingDribblingQuarters++
-            TrainingFocus.FINISHING -> trainingFinishingQuarters++
-            TrainingFocus.DEFENDING -> trainingDefendingQuarters++
-            TrainingFocus.PHYSICAL -> trainingPhysicalQuarters++
+            TrainingFocus.SPEED -> trainingSpeedHundredths += units
+            TrainingFocus.DRIBBLING -> trainingDribblingHundredths += units
+            TrainingFocus.FINISHING -> trainingFinishingHundredths += units
+            TrainingFocus.DEFENDING -> trainingDefendingHundredths += units
+            TrainingFocus.PHYSICAL -> trainingPhysicalHundredths += units
         }
     }
 }

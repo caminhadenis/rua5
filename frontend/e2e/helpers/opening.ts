@@ -43,4 +43,6 @@ export async function finishStarterGuidance(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Próxima orientação', exact: true }).click()
   await page.getByRole('button', { name: 'Próxima orientação', exact: true }).click()
   await page.getByRole('button', { name: 'Explorar o bairro', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Boas-vindas ao bairro' })).toContainText('casa da Dona Amélia')
+  await page.getByRole('button', { name: 'Entendido, Miguel!', exact: true }).click()
 }

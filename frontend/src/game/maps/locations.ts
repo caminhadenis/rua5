@@ -1,7 +1,7 @@
 export type ResidentSprite = 'resident' | 'resident-elder' | 'resident-student' | 'resident-sport' | 'resident-physio' | 'resident-masseur' | 'resident-dress' | 'resident-beard' | 'resident-braid' | 'resident-cap' | 'resident-curly'
 export type FurnitureKind = 'sofa' | 'table' | 'shelf' | 'bed' | 'plant' | 'desk' | 'rack' | 'counter'
 type Furniture = { kind: FurnitureKind; x: number; y: number; width: number; height: number }
-type Person = { name: string; dialogue: string; x: number; y: number; sprite: ResidentSprite; role?: 'trainer' | 'stadium-coach' | 'supporter' | 'physiotherapist' | 'masseur' }
+type Person = { name: string; dialogue: string; x: number; y: number; sprite: ResidentSprite; role?: 'trainer' | 'stadium-coach' | 'supporter' | 'physiotherapist' | 'masseur' | 'tactics-coach' }
 
 export interface InteriorLocation {
   key: string; name: string; kind: 'university' | 'home' | 'school' | 'gym' | 'apartment' | 'stadium' | 'recovery'
@@ -58,16 +58,15 @@ export const INTERIORS: InteriorLocation[] = [
   },
   {
     key: 'benfica.house.01.entry', name: 'Casa da Dona Amélia', kind: 'home',
-    floorColor: 0xc7a77f, wallColor: 0x765941, accentColor: 0xbd745e, pattern: 'wood', wallLabel: 'FOTOS DA QUADRA',
+    floorColor: 0xc7b391, wallColor: 0x345b52, accentColor: 0xd6b36b, pattern: 'wood', wallLabel: 'CADA JOGADA TEM UMA ESCOLHA',
     furniture: [
       { kind: 'shelf', x: 173, y: 180, width: 118, height: 44 },
-      { kind: 'table', x: 490, y: 185, width: 104, height: 56 },
       { kind: 'sofa', x: 765, y: 194, width: 132, height: 56 },
       { kind: 'plant', x: 810, y: 360, width: 36, height: 36 },
     ],
     people: [
-      { name: 'Dona Amélia', sprite: 'resident-dress', x: 313, y: 300, dialogue: 'Conheci Dimas quando dava aula na escola. Era pontual até nas peladas: apito na mão às seis da manhã. Íris aprendeu com ele a fechar a defesa.' },
-      { name: 'Elisa', sprite: 'resident-braid', x: 650, y: 340, dialogue: 'Coleciono recortes dos jogos. Cada jogo do estádio é 1 × 1. Quero ver qual atleta você escolhe para enfrentar Ivo!' },
+      { name: 'Dona Amélia', role: 'tactics-coach', sprite: 'resident-dress', x: 313, y: 300, dialogue: 'Venha ao mural para aprender a orientar seu atleta.' },
+      { name: 'Elisa', sprite: 'resident-braid', x: 650, y: 340, dialogue: 'Ajudo a Dona Amélia a guardar os esquemas de jogo. Dimas aprendeu com ela! O mural explica as escolhas que você faz durante cada duelo.' },
     ],
   },
   {
@@ -127,7 +126,7 @@ export const INTERIORS: InteriorLocation[] = [
     floorColor: 0x8db1a5, wallColor: 0x456a66, accentColor: 0xf0ba69, pattern: 'mat', wallLabel: 'CINCO SETORES DE TREINO',
     furniture: [],
     people: [
-      { name: 'Treinadora Jo', role: 'trainer', sprite: 'resident-sport', x: 595, y: 441, dialogue: 'Bem-vindo! Cada treino dá +0,25 no fundamento escolhido, até 99. Treinar melhora a habilidade; o nível sobe com XP de partidas.' },
+      { name: 'Treinadora Jo', role: 'trainer', sprite: 'resident-sport', x: 595, y: 441, dialogue: 'Bem-vindo ao Centro de Treinamento! Vou explicar como cuidar dos seus atletas.' },
     ],
   },
   {

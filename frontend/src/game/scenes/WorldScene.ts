@@ -9,7 +9,8 @@ import { challengerAsset, DEFAULT_TEAM_COLORS, starterUniformUrl, addWalkingText
 import { welcomeCoach } from '../ui/WelcomeCoach'
 import { trackLocation, type SavedLocation } from '../save/location'
 import type { Profile } from '../../api/gameApi'
-import { ApiError, DuelCommand, stadiumApi, teamApi, type DuelResponse, type RosterPlayer, type ReleasedPlayer } from '../../api/gameApi'
+import { ApiError, stadiumApi, teamApi, type DuelResponse, type RosterPlayer, type ReleasedPlayer } from '../../api/gameApi'
+import { CoachedCommand, type CoachedResponse } from '../../api/coachedMatches'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 
 import { PlayerWalkAnimation } from '../entities/PlayerWalkAnimation'
@@ -33,7 +34,7 @@ export class WorldScene extends Phaser.Scene {
   private minimap!: WorldMinimap
   private guide?: { walk: GuidedWalk; leader: GuidedWalk; mentor: Phaser.GameObjects.Sprite; arrived: () => void }
   private doors: { key: string; x: number; y: number }[] = []
-  private startData: { onboarding?: boolean; name?: string; profile?: Profile; location?: SavedLocation } = {}
+  private startData: { onboarding?: boolean; name?: string; profile?: Profile; location?: SavedLocation; coachedResume?: CoachedResponse } = {}
   private activeChallenger = CHALLENGER
   private npcs: { content: typeof CHALLENGER | typeof RESIDENTS[number]; sprite: Phaser.Types.Physics.Arcade.ImageWithStaticBody; approach: ApproachDialogue; moving: boolean; facing: Facing; patrol?: ChallengerPatrol; walk: PlayerWalkAnimation }[] = []
   private obstacles!: Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer
@@ -43,7 +44,7 @@ export class WorldScene extends Phaser.Scene {
   private releasedNpcs: typeof this.npcs = []
   private encounterLocked = false
   private choosing = false
-  private readonly duelCommand = new DuelCommand()
+  private readonly duelCommand = new CoachedCommand()
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'T' | 'ENTER' | 'ESC', Phaser.Input.Keyboard.Key>
   private walkAnimation!: PlayerWalkAnimation
@@ -228,7 +229,15 @@ export class WorldScene extends Phaser.Scene {
     } else void loadRoster()
     trackLocation(this, () => ({ worldX: this.player.x, worldY: this.player.y }))
     const resume = this.startData.location?.interior
-    if (resume) {
+    if (this.startData.coachedResume) {
+      const coached = this.startData.coachedResume
+      this.choosing = true
+      this.events.once(Phaser.Scenes.Events.WAKE, () => { this.choosing = false })
+      this.time.delayedCall(0, () => {
+        this.scene.sleep()
+        this.scene.run('MatchScene', { coached })
+      })
+    } else if (resume) {
       // Restoring an interior takes precedence over automatically touching its exterior door.
       this.choosing = true
       this.events.once(Phaser.Scenes.Events.WAKE, () => { this.choosing = false })
@@ -547,7 +556,7 @@ export class WorldScene extends Phaser.Scene {
         paragraph(panel, `Adversário: ${opponent.name} · Nv. ${opponent.level}. Escolha seu jogador.`).className = 'selection-description'
         const cards = new PlayerCards(roster)
         panel.append(cards.element)
-        paragraph(panel, 'Duelo: +18 de cansaço. Revanches rendem menos XP.').className = 'selection-hint'
+        paragraph(panel, 'Oriente entre os lances. O desgaste depende do ritmo e do esforço. Revanches rendem menos XP.').className = 'selection-hint'
         const status = paragraph(panel, '')
         status.className = 'selection-status'
         const actions = document.createElement('div')
@@ -562,7 +571,7 @@ export class WorldScene extends Phaser.Scene {
           cards.disabled = true
           status.textContent = 'Simulando duelo…'
           gameAudio.setMusic('duel')
-          void this.duelCommand.play(challenger.id, selectedId).then(result => {
+          void this.duelCommand.challenge(challenger.id, selectedId).then(result => {
             if (!this.scene.isActive()) return
             close(true)
             this.transitionToMatch(result)
@@ -593,7 +602,7 @@ export class WorldScene extends Phaser.Scene {
     await load()
   }
 
-  private transitionToMatch(result: DuelResponse): void {
+  private transitionToMatch(result: CoachedResponse): void {
     const curtain = document.createElement('div')
     curtain.className = 'scene-transition scene-transition-close'
     curtain.setAttribute('aria-hidden', 'true')
@@ -601,7 +610,7 @@ export class WorldScene extends Phaser.Scene {
     window.setTimeout(() => {
       if (!this.scene.isActive()) { curtain.remove(); return }
       this.scene.sleep()
-      this.scene.run('MatchScene', result)
+      this.scene.run('MatchScene', { coached: result })
       curtain.classList.remove('scene-transition-close')
       curtain.classList.add('scene-transition-open')
       window.setTimeout(() => curtain.remove(), 240)

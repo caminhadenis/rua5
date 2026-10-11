@@ -5,7 +5,6 @@ import { createIdempotencyKey } from '../../api/idempotencyKey'
 import type { WorldScene } from './WorldScene'
 import { CHALLENGERS } from '../maps/interactions'
 import { PlayerCards } from '../ui/PlayerCards'
-import { fatigueText, fatigueRecoveryText } from '../ui/fatigue'
 import { recruitmentPanel } from '../ui/RecruitmentPanel'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
 
@@ -70,7 +69,7 @@ export class TeamScene extends Phaser.Scene {
     const title = document.createElement('h2')
     title.textContent = 'Seu time'
     this.panel.append(title)
-    paragraph(this.panel, `Elenco: ${this.roster.length}/5 jogadores. Para contratar com o time cheio, dispense um atleta.`).className = 'roster-capacity'
+    paragraph(this.panel, `Elenco: ${this.roster.length}/5`).className = 'roster-capacity'
     const achievements = document.createElement('section')
     achievements.className = 'team-achievements'
     achievements.setAttribute('aria-label', 'Conquistas')
@@ -83,13 +82,12 @@ export class TeamScene extends Phaser.Scene {
       if (!this.scene.isActive() || !achievements.isConnected) return
       achievements.replaceChildren(achievementsTitle)
       const completed = stadiums.filter(stadium => stadium.status === 'COMPLETED')
-      if (!completed.length) paragraph(achievements, 'Nenhum troféu ainda. Vença um estádio para conquistar o primeiro.')
+      if (!completed.length) paragraph(achievements, 'Nenhum troféu ainda.')
       for (const stadium of completed) {
         const trophy = document.createElement('div')
         trophy.className = 'achievement-trophy'
-        trophy.innerHTML = '<span aria-hidden="true">🏆</span><div><strong></strong><small></small></div>'
+        trophy.innerHTML = '<span aria-hidden="true">🏆</span><div><strong></strong></div>'
         trophy.querySelector('strong')!.textContent = stadium.trophy.name
-        trophy.querySelector('small')!.textContent = stadium.trophy.description
         achievements.append(trophy)
       }
     }).catch(() => {
@@ -97,7 +95,6 @@ export class TeamScene extends Phaser.Scene {
         achievements.querySelector('p')!.textContent = 'Não foi possível carregar as conquistas. Abra Equipe novamente para tentar.'
       }
     })
-    paragraph(this.panel, 'Selecione um jogador para consultar seus atributos. Escolha quem vai jogar antes de cada duelo 1x1.').className = 'selection-description'
     const rosterPanel = document.createElement('div')
     this.panel.append(rosterPanel)
     let cards: PlayerCards
@@ -111,9 +108,6 @@ export class TeamScene extends Phaser.Scene {
       details.replaceChildren()
       if (!player) return
       paragraph(details, `${player.name} · ${archetypes[player.archetype]} · ${roles[player.preferredRole]}`)
-      if (player.recovery) paragraph(details, `Em recuperação no centro · disponível às ${new Date(player.recovery.completesAt).toLocaleTimeString('pt-BR')}.`).className = 'recovery-status'
-      paragraph(details, fatigueText(player.fatigue)).className = 'fatigue-status'
-      paragraph(details, fatigueRecoveryText(player.fatigue)).className = 'fatigue-recovery'
       const list = document.createElement('dl')
       for (const [key, label] of Object.entries(stats)) {
         const term = document.createElement('dt')
@@ -121,7 +115,6 @@ export class TeamScene extends Phaser.Scene {
         const value = document.createElement('dd')
         const stat = key as keyof RosterPlayer['stats']
         value.textContent = player.stats[stat].toLocaleString('pt-BR')
-        if (player.fatigue?.penaltyPercent && player.matchStats) value.textContent += ` → ${player.matchStats[stat].toLocaleString('pt-BR', { maximumFractionDigits: 2 })} em partida`
         list.append(term, value)
       }
       details.append(list)
@@ -134,7 +127,7 @@ export class TeamScene extends Phaser.Scene {
         invites.forEach(button => { button.disabled = true })
         const confirmation = document.createElement('div')
         details.append(confirmation)
-        paragraph(confirmation, `Dispensar ${player.name}? Ele ficará como desafiante neste ponto do bairro e poderá ser convidado novamente. Nível, XP e treinos serão preservados.`)
+        paragraph(confirmation, `Dispensar ${player.name}? Ele voltará ao bairro e poderá ser convidado novamente.`)
         const status = paragraph(confirmation, '')
         status.setAttribute('role', 'status')
         const key = createIdempotencyKey()
@@ -157,7 +150,7 @@ export class TeamScene extends Phaser.Scene {
             world.events.emit('roster-updated', roster)
             gameAudio.play('confirm')
             this.render()
-            paragraph(this.panel, `${player.name} foi dispensado e agora é um desafiante neste ponto do bairro.`).setAttribute('role', 'status')
+            paragraph(this.panel, `${player.name} foi dispensado.`).setAttribute('role', 'status')
           })().catch((error: unknown) => {
             if (!this.scene.isActive() || !status.isConnected) return
             status.textContent = committed ? 'A dispensa foi confirmada. Tente atualizar a equipe.'
@@ -178,7 +171,7 @@ export class TeamScene extends Phaser.Scene {
     }
     const renderCards = () => {
       rosterPanel.replaceChildren()
-      cards = new PlayerCards(this.roster, true)
+      cards = new PlayerCards(this.roster, true, { compact: true })
       rosterPanel.append(cards.element)
       cards.element.addEventListener('change', renderDetails)
       cards.element.addEventListener('fatigue-updated', renderDetails)
@@ -192,6 +185,6 @@ export class TeamScene extends Phaser.Scene {
     const invitations = new Map([...CHALLENGERS, ...this.released].map(challenger => [challenger.id, challenger]))
     for (const challenger of invitations.values()) recruitmentPanel(this.panel, challenger.id, async () => {
       await this.loadTeam()
-    })
+    }, { compact: true })
   }
 }

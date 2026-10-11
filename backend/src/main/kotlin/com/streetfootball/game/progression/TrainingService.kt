@@ -2,6 +2,7 @@ package com.streetfootball.game.progression
 
 import com.streetfootball.game.challenge.OwnedPlayerNotFoundException
 import com.streetfootball.game.challenge.PlayerNotOwnedException
+import com.streetfootball.game.match.MatchRepository
 import com.streetfootball.game.match.domain.MatchStats
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
@@ -52,6 +53,7 @@ data class TrainingStatus(
 @Service
 class TrainingService(
     private val profiles: GameProfileRepository,
+    private val matches: MatchRepository,
     private val ownedPlayers: OwnedPlayerRepository,
     private val definitions: PlayerDefinitionRepository,
     private val jdbc: JdbcTemplate,
@@ -123,6 +125,7 @@ class TrainingService(
             if (prior.ownedPlayerId != playerId || prior.focus != focus) throw TrainingIdempotencyConflictException()
             return prior
         }
+        matches.requireIdle(profileId)
         val owned = ownedPlayers.findById(playerId).orElseThrow(::OwnedPlayerNotFoundException)
         if (owned.profileId != profileId) throw PlayerNotOwnedException()
         if (!owned.rosterActive) throw OwnedPlayerNotFoundException()
@@ -148,7 +151,7 @@ class TrainingService(
                     focus.name,
                 ).singleOrNull() ?: 0
         val step = TrainingPolicy.completeSession(progressBefore)
-        if (step.improvesStat) owned.increaseTraining(focus)
+        if (step.improvesStat) owned.increaseTraining(focus, TrainingPolicy.gainUnits(owned.fatigueAt(now), before))
         val after = TrainingPolicy.stat(Progression.effectiveStats(base, owned.level, owned.trainingBonuses()), focus)
         jdbc.update(
             """INSERT INTO owned_player_training_progress (owned_player_id, focus, sessions_completed) VALUES (?, ?, ?)

@@ -1,6 +1,8 @@
 import { continueGame } from './helpers/opening'
 import { expect, test, type Page } from '@playwright/test'
 import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
+import type { CoachedResponse } from '../src/api/coachedMatches'
+import { finishedDuel } from './helpers/coachedMatch'
 
 async function enterWorld(page: Page) {
   await page.goto('/')
@@ -40,10 +42,11 @@ test('real victory → recruit with lost response → roster → attributes → 
   let won = false
   // Real simulation, no seed or score injection. Rematch if the first game is not a win.
   for (let attempt = 0; attempt < 20; attempt++) {
-    const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/matches'))
+    const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/coached-matches'))
     await page.getByRole('button', { name: 'Iniciar desafio' }).click()
-    const result = await (await response).json() as DuelResponse
+    const started = await (await response).json() as CoachedResponse
     await page.getByRole('button', { name: 'Pular', exact: true }).click()
+    const result = await finishedDuel(page, started.match.id)
     if (result.match.outcome === 'WIN') { won = true; break }
     await expect(page.getByRole('button', { name: 'Convidar para o time' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
@@ -62,15 +65,16 @@ test('real victory → recruit with lost response → roster → attributes → 
   })
   await page.getByRole('button', { name: 'Convidar para o time' }).click()
   await page.getByRole('button', { name: 'Tentar convite novamente' }).click()
-  await expect(page.getByRole('region', { name: 'Recrutamento · Nilo' }).getByRole('status')).toContainText('Nilo entrou para o seu time!')
+  await expect(page.getByRole('region', { name: 'Recrutamento · Nilo' }).getByRole('status')).toContainText('Valeu por me chamar para o seu time!')
+  await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Equipe', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Partida', exact: true })).toHaveCount(0)
   await expectNiloRecruited(page)
   expect(receipts).toHaveLength(2)
   expect(receipts[0]).toEqual(receipts[1])
   const roster = await (await page.request.get('/api/v1/roster')).json() as RosterPlayer[]
   expect(roster).toHaveLength(2)
   const nilo = roster.find(p => p.playerDefinitionId === 'npc_nilo_01')!
-  await page.getByRole('button', { name: 'Voltar ao bairro' }).click()
-  await page.getByRole('button', { name: 'Equipe · T' }).click()
   await expect(page.getByRole('region', { name: 'Equipe', exact: true })).toBeVisible()
   await expect(page.getByRole('radio')).toHaveCount(2)
   for (const sprite of await page.locator('.player-card-sprite').all()) {
@@ -80,7 +84,7 @@ test('real victory → recruit with lost response → roster → attributes → 
   }
   await expect(page.locator('.lineup-slot')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Salvar escalação' })).toHaveCount(0)
-  await expect(page.getByRole('region', { name: 'Recrutamento · Nilo' })).toContainText('Nilo já faz parte')
+  await expect(page.getByRole('region', { name: 'Recrutamento · Nilo' })).toHaveCount(0)
   await page.locator('.player-card').filter({ hasText: 'Nilo' }).click()
   await expect(page.locator('.player-details')).toContainText('Marcador · Defesa')
   await expect(page.locator('.player-details')).toContainText(String(nilo.stats.defending))
@@ -110,6 +114,9 @@ test('team shows every athlete and their attributes without loading or saving a 
   const roster = Array.from({ length: 6 }, (_, index) => ({
     ...starter!, id: `fixture-${index}`, name: `Jogador ${index + 1}`,
     stats: { ...starter!.stats, speed: 40 + index * 0.25 },
+    coachedMatchStats: { ...starter!.stats, speed: 25 },
+    fatigue: { value: 65, condition: 'VERY_TIRED' as const, penaltyPercent: 10,
+      nextConditionAt: new Date(Date.now() + 120_000).toISOString(), fullyRecoveredAt: new Date(Date.now() + 1_000_000).toISOString() },
   }))
   const lineupRequests: string[] = []
   await page.route('**/api/v1/roster', route => route.fulfill({ json: roster }))
@@ -120,6 +127,13 @@ test('team shows every athlete and their attributes without loading or saving a 
   await enterWorld(page)
   await page.keyboard.press('t', { delay: 80 })
   await expect(page.getByRole('radio')).toHaveCount(6)
+  const team = page.getByRole('region', { name: 'Equipe', exact: true })
+  await expect(team.locator('.fatigue-recovery')).toHaveCount(0)
+  await expect(team.locator('.selection-description')).toHaveCount(0)
+  await expect(team.getByText(/no início do duelo|Descanso completo|disponível às|Vença .* para liberar o convite|já faz parte do seu elenco/)).toHaveCount(0)
+  await expect(team.locator('.player-card-fatigue').first().getByRole('img')).toHaveAttribute('aria-label', 'Energia: Muito cansado')
+  await expect(team.locator('.player-card-fatigue').first()).not.toContainText('/100')
+  await expect(team.locator('.player-card-fatigue').first()).not.toHaveAttribute('title')
   await expect(page.locator('.lineup-slot')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Salvar escalação|Voltar sem salvar/ })).toHaveCount(0)
   const lastPlayer = page.getByRole('radio', { name: 'Jogador 6, nível 1', exact: true })
@@ -153,6 +167,7 @@ test('inviting through the team screen removes the challenger from the neighborh
   await enterWorld(page)
   await page.getByRole('button', { name: 'Equipe · T' }).click()
   await page.getByRole('region', { name: 'Recrutamento · Nilo' }).getByRole('button', { name: 'Convidar para o time' }).click()
+  await expect(page.getByRole('region', { name: 'Recrutamento · Nilo' }).getByRole('status')).toContainText('Valeu por me chamar para o seu time!')
   await expect(page.getByRole('radio')).toHaveCount(2)
   await expectNiloRecruited(page)
   await page.getByRole('button', { name: 'Voltar ao bairro', exact: true }).click()

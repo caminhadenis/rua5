@@ -1,6 +1,21 @@
 import type { ResidentSprite } from './locations'
 import type { TrainingFocus } from '../../api/gameApi'
 
+export const TRAINING_INTRO = [
+  'Bem-vindo ao Centro de Treinamento! Aqui você prepara os atletas do seu time.',
+  'Temos cinco setores: velocidade, drible, finalização, marcação e físico.',
+  'Converse com o treinador do setor e escolha qual atleta vai treinar.',
+  'O treino melhora apenas o fundamento do setor escolhido.',
+  'Descansado, o atleta ganha +0,25 por treino nesse fundamento.',
+  'Cansado, o ganho diminui para +0,20 por treino.',
+  'Muito cansado, o atleta ganha +0,15 por treino.',
+  'Exausto, ele ainda melhora, mas ganha apenas +0,05 por treino.',
+  'Cada fundamento pode chegar até 99. Consulte os atributos no menu Equipe.',
+  'Treino não dá XP nem aumenta o nível. Para subir de nível, dispute partidas.',
+  'Cada treino gera 12 pontos de desgaste. Descansar ou visitar o Centro de Recuperação melhora o rendimento.',
+  'Cada sessão dura cinco segundos. Ao terminar, você pode treinar novamente sem esperar.',
+]
+
 export interface TrainingSector {
   focus: TrainingFocus
   label: string

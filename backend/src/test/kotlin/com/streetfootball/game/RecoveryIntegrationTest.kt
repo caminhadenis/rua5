@@ -146,14 +146,14 @@ class RecoveryIntegrationTest {
         assertEquals(403, start(foreign, id = p.id).statusCode())
         assertEquals(404, send(foreign.client, "POST", "/recovery/sessions/$id/cancel", key = UUID.randomUUID()).statusCode())
         assertEquals(409, start(p, station = "benfica.recovery.ice.01", key = key).statusCode())
-        // Advance the stored treatment by a real minute without needing a scheduler.
+        // Advance one second of the five-second treatment without needing a scheduler.
         jdbc.update(
-            "UPDATE owned_player SET fatigue_updated_at = now() - interval '60 seconds', recovery_ends_at = now() + interval '240 seconds' WHERE id = ?",
+            "UPDATE owned_player SET fatigue_updated_at = now() - interval '1 second', recovery_ends_at = now() + interval '4 seconds' WHERE id = ?",
             p.id,
         )
         val cancelKey = UUID.randomUUID()
         val cancelled = body(send(p.client, "POST", "/recovery/sessions/$id/cancel", key = cancelKey))
-        assertTrue(cancelled["fatigue"]["value"].asDouble() in 79.0..80.0)
+        assertTrue(cancelled["fatigue"]["value"].asDouble() in 74.0..80.0)
         assertEquals(true, roster(p)["recovery"].isNull)
         val another = body(start(p, station = "benfica.recovery.ice.01"))
         assertEquals(cancelled, body(send(p.client, "POST", "/recovery/sessions/$id/cancel", key = cancelKey)))

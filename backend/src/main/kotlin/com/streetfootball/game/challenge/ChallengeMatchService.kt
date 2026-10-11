@@ -1,11 +1,14 @@
 package com.streetfootball.game.challenge
 
 import com.streetfootball.game.match.MatchRepository
+import com.streetfootball.game.match.PreparedDuel
 import com.streetfootball.game.match.StoredMatch
+import com.streetfootball.game.match.domain.CoachedDuelEngine
 import com.streetfootball.game.match.domain.DuelMatchEngine
 import com.streetfootball.game.match.domain.MatchEngine
 import com.streetfootball.game.match.domain.MatchMode
 import com.streetfootball.game.match.domain.MatchRequest
+import com.streetfootball.game.match.domain.MatchResult
 import com.streetfootball.game.match.snapshot
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
@@ -56,6 +59,19 @@ class ChallengeMatchService(
             return it
         }
 
+        matches.requireIdle(profileId)
+        val prepared = prepare(profileId, challengerId, ownedPlayerId)
+        return complete(prepared, key, engine.simulate(prepared.request))
+    }
+
+    @Transactional
+    fun prepare(
+        profileId: UUID,
+        challengerId: UUID,
+        ownedPlayerId: UUID,
+        version: String = DuelMatchEngine.VERSION,
+    ): PreparedDuel {
+        val profile = profiles.findByIdForUpdate(profileId) ?: throw ProfileNotFoundException()
         val challenger = challengers.findForProfile(profileId, challengerId) ?: throw ChallengerNotAvailableException()
         if (!challenger.enabled || (profile.currentMapId != null && profile.currentMapId != challenger.mapId)) {
             throw ChallengerNotAvailableException()
@@ -75,13 +91,61 @@ class ChallengeMatchService(
         val input =
             MatchRequest(
                 mode = MatchMode.DUEL_1V1,
-                home = listOf(home.snapshot(owned.id.toString(), owned.level, owned, fatigueBefore)),
-                away = listOf(away.snapshot(challenger.id.toString(), challenger.level, released, released?.fatigueAt(now) ?: 0.0)),
+                home =
+                    listOf(
+                        home.snapshot(
+                            owned.id.toString(),
+                            owned.level,
+                            owned,
+                            if (version ==
+                                CoachedDuelEngine.VERSION
+                            ) {
+                                0.0
+                            } else {
+                                fatigueBefore
+                            },
+                        ),
+                    ),
+                away =
+                    listOf(
+                        away.snapshot(
+                            challenger.id.toString(),
+                            challenger.level,
+                            released,
+                            if (version ==
+                                CoachedDuelEngine.VERSION
+                            ) {
+                                0.0
+                            } else {
+                                released?.fatigueAt(now) ?: 0.0
+                            },
+                        ),
+                    ),
                 seed = seedGenerator.nextLong(),
-                engineVersion = DuelMatchEngine.VERSION,
+                engineVersion = version,
+                homeInitialFatigue = if (version == CoachedDuelEngine.VERSION) fatigueBefore else 0.0,
+                awayInitialFatigue = if (version == CoachedDuelEngine.VERSION) released?.fatigueAt(now) ?: 0.0 else 0.0,
             )
+        return PreparedDuel(profileId, ownedPlayerId, input, fatigueBefore, released?.fatigueAt(now) ?: 0.0, sourceId = challengerId)
+    }
+
+    @Transactional
+    fun complete(
+        prepared: PreparedDuel,
+        key: UUID,
+        result: MatchResult,
+        matchId: UUID = UUID.randomUUID(),
+        fatigueCost: Int? = null,
+    ): StoredMatch {
+        val profileId = prepared.profileId
+        val challengerId = requireNotNull(prepared.sourceId)
+        val ownedPlayerId = prepared.ownedPlayerId
+        val owned = ownedPlayers.findById(ownedPlayerId).orElseThrow(::OwnedPlayerNotFoundException)
+        val challenger = challengers.findForProfile(profileId, challengerId) ?: throw ChallengerNotAvailableException()
+        val away = definitions.findById(challenger.playerDefinitionId).orElseThrow(::ChallengerNotAvailableException)
+        val input = prepared.request
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
         val started = System.nanoTime()
-        val result = engine.simulate(input)
         val previous = progressRepository.find(profileId, challengerId)
         val awarded = Progression.reward(result.outcome, owned.level, challenger.level, previous.wins, previous.attempts)
         val advanced = Progression.advance(owned.level, owned.xp, awarded)
@@ -100,7 +164,13 @@ class ChallengeMatchService(
                 if (advanced.level < Progression.MAX_LEVEL) Progression.xpForNextLevel(advanced.level) else null,
                 progress,
                 previous.recruitmentStatus == RecruitmentStatus.LOCKED && progress.recruitmentStatus == RecruitmentStatus.AVAILABLE,
-                owned.addFatigue(FatiguePolicy.DUEL_COST, now),
+                if (fatigueCost ==
+                    null
+                ) {
+                    owned.addFatigue(FatiguePolicy.DUEL_COST, now)
+                } else {
+                    owned.finishCoachedFatigue(prepared.homeFatigue, fatigueCost, now)
+                },
             )
         owned.level = advanced.level
         owned.xp = advanced.xp
@@ -109,7 +179,7 @@ class ChallengeMatchService(
         owned.losses += progress.losses - previous.losses
         val match =
             StoredMatch(
-                id = UUID.randomUUID(),
+                id = matchId,
                 profileId = profileId,
                 sourceId = challengerId,
                 ownedPlayerId = ownedPlayerId,

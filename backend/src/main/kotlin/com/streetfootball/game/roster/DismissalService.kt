@@ -3,6 +3,7 @@ package com.streetfootball.game.roster
 import com.streetfootball.game.challenge.IdempotencyConflictException
 import com.streetfootball.game.challenge.OwnedPlayerNotFoundException
 import com.streetfootball.game.challenge.PlayerNotOwnedException
+import com.streetfootball.game.match.MatchRepository
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
 import org.springframework.jdbc.core.JdbcTemplate
@@ -13,6 +14,7 @@ import java.util.UUID
 @Service
 class DismissalService(
     private val profiles: GameProfileRepository,
+    private val matches: MatchRepository,
     private val owned: OwnedPlayerRepository,
     private val jdbc: JdbcTemplate,
 ) {
@@ -78,6 +80,7 @@ class DismissalService(
             }
             return prior
         }
+        matches.requireIdle(profileId)
         if (location.mapId != "benfica" ||
             (profile.currentMapId != null && profile.currentMapId != location.mapId) ||
             !location.x.isFinite() ||

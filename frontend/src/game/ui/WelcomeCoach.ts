@@ -42,11 +42,16 @@ export function welcomeCoach(scene: Phaser.Scene, player: Phaser.Types.Physics.A
     paragraph(panel, 'MIGUEL · OLHEIRO DO BAIRRO').className = 'story-speaker'
     paragraph(panel, text)
   }
+  const farewell = (after?: () => void) => {
+    panel.hidden = false
+    speech('Antes de me despedir: visite a casa da Dona Amélia, a oeste da universidade, com a placa TÁTICAS. Ela é uma treinadora aposentada, treinou o Professor Dimas e vai ensinar você a escolher o ritmo, atacar e defender durante as partidas. Boa sorte com seu time!')
+    button(panel, 'Entendido, Miguel!', () => { finish(); after?.() })
+  }
   const arrived = () => {
     panel.hidden = false
-    speech('Chegamos ao Centro de Treinamento! Entre pela porta e conheça a treinadora Jo. Há cinco setores: velocidade, drible, finalização, marcação e físico. Cada sessão melhora um fundamento em +0,25, sem mudar o nível. O T no minimapa marca este prédio; E é o estádio e R é o centro de recuperação.')
-    button(panel, 'Entrar no centro de treinamento', () => { finish(); enterTraining() })
-    button(panel, 'Explorar o bairro', finish)
+    speech('Chegamos ao Centro de Treinamento! Entre pela porta e conheça a treinadora Jo. Há cinco setores: velocidade, drible, finalização, marcação e físico. A treinadora explica como as sessões melhoram os fundamentos. O T no minimapa marca este prédio; E é o estádio e R é o centro de recuperação.')
+    button(panel, 'Entrar no centro de treinamento', () => farewell(enterTraining))
+    button(panel, 'Explorar o bairro', () => farewell())
   }
   const offerTour = () => {
     speech('Para subir o nível dos jogadores, dispute desafios nas ruas: eles rendem XP, e as vitórias rendem mais. Explore novos adversários, pois revanches rendem menos XP. No Centro de Treinamento você melhora os fundamentos, sem ganhar XP. Quer que eu acompanhe você até lá?')
@@ -55,10 +60,10 @@ export function welcomeCoach(scene: Phaser.Scene, player: Phaser.Types.Physics.A
       if (!guide(mentor, arrived)) {
         panel.hidden = false
         speech('O caminho está ocupado agora. Você encontra o Centro de Treinamento pelo T no minimapa. Caminhe até a porta para entrar; a treinadora Jo vai receber você!')
-        button(panel, 'Explorar o bairro', finish)
+        button(panel, 'Explorar o bairro', () => farewell())
       }
     })
-    button(panel, 'Explorar o bairro', finish)
+    button(panel, 'Explorar o bairro', () => farewell())
   }
   const selectPlayer = () => {
     panel.classList.remove('story-dialogue')

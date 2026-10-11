@@ -49,6 +49,14 @@ object FatiguePolicy {
         }
     }
 
+    fun condition(value: Double): FatigueCondition =
+        when (penaltyPercent(value)) {
+            15 -> FatigueCondition.EXHAUSTED
+            10 -> FatigueCondition.VERY_TIRED
+            5 -> FatigueCondition.TIRED
+            else -> FatigueCondition.RESTED
+        }
+
     fun status(
         value: Double,
         now: Instant,
@@ -66,12 +74,7 @@ object FatiguePolicy {
             }
         return FatigueStatus(
             value,
-            when (penalty) {
-                15 -> FatigueCondition.EXHAUSTED
-                10 -> FatigueCondition.VERY_TIRED
-                5 -> FatigueCondition.TIRED
-                else -> FatigueCondition.RESTED
-            },
+            condition(value),
             penalty,
             // A boundary itself still belongs to the more tired condition.
             threshold?.let { now.plusMillis(ceil((value - it) * millisPerPoint).toLong() + 1) },

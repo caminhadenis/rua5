@@ -1,6 +1,21 @@
 import type Phaser from 'phaser'
 
 export function drawNeighborhoodArt(scene: Phaser.Scene, map: Phaser.Tilemaps.Tilemap): void {
+  const tacticsHouse = map.getObjectLayer('houses')?.objects.find(object => object.name === 'benfica.house.01')
+  if (tacticsHouse) {
+    const x = (tacticsHouse.x ?? 0) + (tacticsHouse.width ?? 0) / 2
+    const y = tacticsHouse.y ?? 0
+    scene.add.text(x, y + 22, 'DONA AMÉLIA\nTÁTICAS', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#fff4ce', backgroundColor: '#204d43',
+      align: 'center', padding: { x: 8, y: 4 },
+    }).setOrigin(0.5, 0).setDepth(3)
+    const chalk = scene.add.graphics().setDepth(2)
+    chalk.fillStyle(0x204d43).fillRect(x - 36, y + 97, 72, 42)
+    chalk.lineStyle(2, 0xf5ead2).strokeRect(x - 30, y + 103, 60, 30)
+    chalk.lineBetween(x, y + 103, x, y + 133).strokeCircle(x, y + 118, 8)
+    chalk.lineStyle(2, 0xf7d154).lineBetween(x - 20, y + 118, x + 20, y + 118)
+      .lineBetween(x + 20, y + 118, x + 13, y + 111)
+  }
   scene.add.text(496, 1570, '↓ CENTRO DE RECUPERAÇÃO · TRILHA DO SUL', {
     fontFamily: 'monospace', fontSize: '14px', color: '#fff4ce', backgroundColor: '#152b32', padding: { x: 8, y: 4 },
   }).setOrigin(0.5).setDepth(2)

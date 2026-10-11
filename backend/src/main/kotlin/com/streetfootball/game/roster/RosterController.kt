@@ -1,5 +1,6 @@
 package com.streetfootball.game.roster
 
+import com.streetfootball.game.match.domain.CoachedDuelEngine
 import com.streetfootball.game.match.domain.MatchStats
 import com.streetfootball.game.profile.ProfileSession
 import com.streetfootball.game.progression.FatiguePolicy
@@ -56,6 +57,7 @@ class RosterService(
                 fatigue,
                 FatiguePolicy.matchStats(permanent, fatigue.value),
                 recovery,
+                CoachedDuelEngine.effectiveStats(permanent, fatigue.value),
             )
         }
 }
@@ -76,4 +78,5 @@ data class RosterPlayerResponse(
     val fatigue: FatigueStatus,
     val matchStats: MatchStats,
     val recovery: com.streetfootball.game.progression.RecoveryStatus? = null,
+    val coachedMatchStats: MatchStats? = null,
 )

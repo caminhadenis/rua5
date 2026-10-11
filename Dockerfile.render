@@ -1,0 +1,23 @@
+# Build both apps and serve them from one origin; Compose keeps its local images.
+FROM node:22-alpine AS frontend
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM eclipse-temurin:21-jdk-alpine AS backend
+WORKDIR /app/backend
+COPY backend/ ./
+COPY --from=frontend /app/frontend/dist/ ./src/main/resources/static/
+RUN chmod +x gradlew
+RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon bootJar
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+RUN addgroup -S game && adduser -S game -G game
+COPY --from=backend /app/backend/build/libs/*-SNAPSHOT.jar app.jar
+USER game
+ENV JAVA_TOOL_OPTIONS="-Xms64m -Xmx256m"
+EXPOSE 10000
+ENTRYPOINT ["java", "-jar", "app.jar"]

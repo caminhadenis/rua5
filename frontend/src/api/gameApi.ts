@@ -1,4 +1,5 @@
 import { createIdempotencyKey } from './idempotencyKey'
+import { csrfHeaders } from './auth'
 
 export interface Profile { id: string; displayName: string; starterSelected: boolean; primaryColor: string; secondaryColor: string }
 export interface Starter { id: string; name: string; archetype: string }
@@ -20,14 +21,14 @@ export interface RosterPlayer {
   archetype: 'DRIBBLER' | 'FINISHER' | 'PLAYMAKER' | 'MARKER'
   preferredRole: 'DEFENDER' | 'MIDFIELDER' | 'ATTACKER'
   stats: Record<'speed' | 'dribbling' | 'finishing' | 'defending' | 'physical', number>
-  fatigue?: FatigueStatus; matchStats?: RosterPlayer['stats']; recovery?: RecoveryStatus | null
+  fatigue?: FatigueStatus; matchStats?: RosterPlayer['stats']; coachedMatchStats?: RosterPlayer['stats']; recovery?: RecoveryStatus | null
 }
 export interface ChallengeInfo {
   id: string; name: string; level: number; recruitable: boolean
   rosterFull?: boolean
   recruitmentStatus: 'LOCKED' | 'AVAILABLE' | 'RECRUITED'
 }
-export type EventType = 'POSSESSION' | 'DRIBBLE_SUCCESS' | 'TACKLE' | 'SHOT' | 'SHOT_MISSED' | 'GOAL' | 'SAVE' | 'PENALTY_GOAL' | 'PENALTY_MISSED'
+export type EventType = 'POSSESSION' | 'DRIBBLE_SUCCESS' | 'TACKLE' | 'SHOT' | 'SHOT_MISSED' | 'GOAL' | 'SAVE' | 'PENALTY_GOAL' | 'PENALTY_MISSED' | 'HOLD' | 'SHOT_BLOCKED'
 export interface MatchEvent {
   sequence: number; minute: number; type: EventType; side: 'HOME' | 'AWAY'; actorPlayerId: string
   homeScore: number; awayScore: number
@@ -57,7 +58,7 @@ export async function request<T>(path: string, body?: unknown, key?: string, met
   const response = await fetch(`/api/v1${path}`, {
     signal: AbortSignal.timeout(15_000),
     method: method ?? (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin',
-    headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(key ? { 'Idempotency-Key': key } : {}) },
+    headers: { ...(body === undefined && method === undefined ? {} : csrfHeaders()), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(key ? { 'Idempotency-Key': key } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!response.ok) {
@@ -113,7 +114,7 @@ export class TrainingCommand {
   }
 }
 
-const eventTypes: string[] = ['POSSESSION', 'DRIBBLE_SUCCESS', 'TACKLE', 'SHOT', 'SHOT_MISSED', 'GOAL', 'SAVE', 'PENALTY_GOAL', 'PENALTY_MISSED']
+const eventTypes: string[] = ['POSSESSION', 'DRIBBLE_SUCCESS', 'TACKLE', 'SHOT', 'SHOT_MISSED', 'GOAL', 'SAVE', 'PENALTY_GOAL', 'PENALTY_MISSED', 'HOLD', 'SHOT_BLOCKED']
 export function parseDuel(value: DuelResponse): DuelResponse {
   const match = value?.match
   if (!match || !Array.isArray(match.events) || !match.events.length ||

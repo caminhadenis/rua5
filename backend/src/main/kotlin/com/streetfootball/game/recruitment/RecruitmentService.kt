@@ -4,6 +4,7 @@ import com.streetfootball.game.challenge.ChallengerNotAvailableException
 import com.streetfootball.game.challenge.ChallengerProgress
 import com.streetfootball.game.challenge.ChallengerProgressRepository
 import com.streetfootball.game.challenge.ChallengerRepository
+import com.streetfootball.game.match.MatchRepository
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
 import com.streetfootball.game.roster.OwnedPlayerEntity
@@ -18,6 +19,7 @@ import java.util.UUID
 @Service
 class RecruitmentService(
     private val profiles: GameProfileRepository,
+    private val matches: MatchRepository,
     private val challengers: ChallengerRepository,
     private val definitions: PlayerDefinitionRepository,
     private val progress: ChallengerProgressRepository,
@@ -64,6 +66,7 @@ class RecruitmentService(
         if (history.recruitmentStatus == RecruitmentStatus.RECRUITED && existing?.rosterActive == true) {
             return RecruitmentResponse(challengerId, checkNotNull(existing).id)
         }
+        matches.requireIdle(profileId)
         if (!profile.starterSelected ||
             !challenger.enabled ||
             (profile.currentMapId != null && profile.currentMapId != challenger.mapId)

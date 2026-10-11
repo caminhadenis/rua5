@@ -1,12 +1,28 @@
 package com.streetfootball.game.progression
 
 import com.streetfootball.game.match.domain.MatchStats
+import kotlin.math.roundToInt
 
 enum class TrainingFocus { SPEED, DRIBBLING, FINISHING, DEFENDING, PHYSICAL }
 
-/** Each drill grants a quarter stat point. Fatigue accumulates without a training cooldown. */
+/** Gains use the recovered fatigue before the drill; persistence counts hundredths of a point. */
 object TrainingPolicy {
-    const val STAT_GAIN = 0.25
+    const val UNITS_PER_POINT = 100
+
+    fun gainUnits(
+        fatigue: Double,
+        stat: Double,
+    ): Int {
+        require(stat.isFinite() && stat in 1.0..99.0)
+        val gain =
+            when (FatiguePolicy.condition(fatigue)) {
+                FatigueCondition.RESTED -> 25
+                FatigueCondition.TIRED -> 20
+                FatigueCondition.VERY_TIRED -> 15
+                FatigueCondition.EXHAUSTED -> 5
+            }
+        return minOf(gain, ((99 - stat) * UNITS_PER_POINT).roundToInt())
+    }
 
     fun stat(
         stats: MatchStats,

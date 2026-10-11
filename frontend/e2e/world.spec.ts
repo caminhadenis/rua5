@@ -254,13 +254,16 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
       const { game } = await import('/src/main.ts')
       return game.scene.isActive('InteriorScene')
     })).toBe(true)
+    if (key === 'benfica.house.01.entry') {
+      await page.getByRole('button', { name: 'Explorar a casa', exact: true }).click()
+    }
     if (key === 'benfica.gym.entry') {
       const trainerWords = await page.evaluate(async () => {
         const { game } = await import('/src/main.ts')
         const interior = game.scene.getScene('InteriorScene')
         return interior.dialogue?.list[1]?.text as string
       })
-      expect(trainerWords).toContain('Cada treino dá +0,25 no fundamento escolhido, até 99')
+      expect(trainerWords).toContain('Bem-vindo ao Centro de Treinamento!')
       const center = await page.evaluate(async () => {
         const { game } = await import('/src/main.ts')
         const interior = game.scene.getScene('InteriorScene')
@@ -281,7 +284,8 @@ test('enter a house, school, gym and apartment, talk inside and return to the sa
     const room = await page.evaluate(async () => {
       const { game } = await import('/src/main.ts')
       const interior = game.scene.getScene('InteriorScene')
-      interior.player.setPosition(interior.people[0].sprite.x - 34, interior.people[0].sprite.y)
+      const person = interior.people.find((p: { role?: string }) => p.role !== 'tactics-coach')
+      interior.player.setPosition(person.sprite.x - 34, person.sprite.y)
       return { people: interior.people.length as number, title: interior.location.name as string }
     })
     expect(room.people).toBeGreaterThanOrEqual(2)

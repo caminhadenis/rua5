@@ -27,6 +27,26 @@ import java.util.UUID
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+    @ExceptionHandler(com.streetfootball.game.match.CoachedMatchException::class)
+    fun coachedMatch(exception: com.streetfootball.game.match.CoachedMatchException): ResponseEntity<ApiError> =
+        error(
+            if (exception.code == "MATCH_NOT_FOUND") HttpStatus.NOT_FOUND else HttpStatus.CONFLICT,
+            exception.code,
+            when (exception.code) {
+                "MATCH_IN_PROGRESS" -> "Conclua a partida em andamento antes de iniciar outra atividade."
+                "MATCH_STEP_CHANGED" -> "A partida avançou. Atualize para retomar o trecho atual."
+                else -> "Partida não encontrada."
+            },
+        )
+
+    @ExceptionHandler(com.streetfootball.game.account.AccountAlreadyExistsException::class)
+    fun accountAlreadyExists(): ResponseEntity<ApiError> =
+        error(HttpStatus.CONFLICT, "ACCOUNT_ALREADY_EXISTS", "Já existe uma conta com este e-mail. Use Entrar.")
+
+    @ExceptionHandler(com.streetfootball.game.account.InvalidPasswordException::class)
+    fun invalidPassword(): ResponseEntity<ApiError> =
+        error(HttpStatus.BAD_REQUEST, "INVALID_PASSWORD", "Use uma senha de 12 a 72 caracteres, com no máximo 72 bytes.")
+
     @ExceptionHandler(com.streetfootball.game.progression.RecoveryRuleException::class)
     fun recoveryRule(exception: com.streetfootball.game.progression.RecoveryRuleException): ResponseEntity<ApiError> {
         val message =

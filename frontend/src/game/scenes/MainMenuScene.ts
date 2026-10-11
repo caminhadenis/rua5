@@ -4,6 +4,9 @@ import { ApiError, request, type Profile } from '../../api/gameApi'
 import { applyTeamColors } from '../team/teamColors'
 import { loadLocation } from '../save/location'
 import { button, paragraph, scenePanel } from '../ui/ScenePanel'
+import { loadAuth, signOut, type AuthStatus } from '../../api/auth'
+import { accountPanel } from '../ui/AccountPanel'
+import { coachedApi } from '../../api/coachedMatches'
 
 export class MainMenuScene extends Phaser.Scene {
   constructor() { super('MainMenuScene') }
@@ -19,12 +22,13 @@ export class MainMenuScene extends Phaser.Scene {
     const actions = document.createElement('nav')
     actions.setAttribute('aria-label', 'Menu principal')
     panel.append(actions)
-    button(actions, 'INICIAR', () => { this.registry.remove('profileId'); this.scene.start('GraduationScene') })
+    const start = button(actions, 'INICIAR', () => { this.registry.remove('profileId'); this.scene.start('GraduationScene') })
+    start.disabled = true
     const resume = button(actions, 'CONTINUAR', () => { void continueGame() })
     resume.disabled = true
     const options = button(actions, 'OPÇÕES', () => {})
     options.disabled = true
-    const status = paragraph(panel, 'Consultando jornada salva…')
+    const status = paragraph(panel, 'Conectando ao jogo… O primeiro acesso pode levar um minuto.')
     status.setAttribute('role', 'status')
     let profile: Profile | undefined
     const load = async () => {
@@ -49,18 +53,48 @@ export class MainMenuScene extends Phaser.Scene {
       try {
         // Fetch fresh state: another tab may have advanced or started a new journey.
         const current = await request<Profile>('/profile')
+        const coachedResume = current.starterSelected ? await coachedApi.active() : null
         await applyTeamColors(this, current)
         if (!this.scene.isActive()) return
         this.registry.set('profileId', current.id)
         this.scene.start('WorldScene', current.starterSelected
-          ? { location: loadLocation(current.id) }
+          ? { location: loadLocation(current.id), coachedResume: coachedResume ?? undefined }
           : { onboarding: true, profile: current, name: current.displayName })
       } catch {
         resume.disabled = false
         status.textContent = 'Não foi possível continuar. Tente novamente.'
       }
     }
-    void load()
+    const ready = (account: AuthStatus) => {
+      if (!this.scene.isActive()) return
+      start.disabled = false
+      if (account.enabled) {
+        paragraph(panel, `Conta: ${account.email ?? ''}`).className = 'account-email'
+        const logout = button(panel, 'Sair da conta', () => {
+          logout.disabled = true
+          void signOut().then(() => { this.scene.restart() }).catch(() => { logout.disabled = false; status.textContent = 'Não foi possível sair. Tente novamente.' })
+        })
+        logout.classList.add('account-logout')
+      }
+      void load()
+    }
+    const connect = async () => {
+      panel.querySelector('[data-connect-retry]')?.remove()
+      try {
+        const account = await loadAuth()
+        if (!this.scene.isActive()) return
+        if (account.enabled && !account.authenticated) {
+          actions.hidden = true
+          status.textContent = 'Entre ou crie sua conta para jogar.'
+          accountPanel(panel, current => { actions.hidden = false; ready(current) })
+        } else ready(account)
+      } catch {
+        if (!this.scene.isActive()) return
+        status.textContent = 'Não foi possível conectar ao jogo.'
+        button(panel, 'Tentar conectar novamente', () => { void connect() }).dataset.connectRetry = 'true'
+      }
+    }
+    void connect()
   }
 
   private drawCourt(): void {

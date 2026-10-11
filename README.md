@@ -15,6 +15,28 @@ Há somente um bairro (Benfica), com áudio mínimo, orientação de progresso e
 As versões npm estão fixadas em `frontend/package-lock.json`. As dependências JVM ficam
 fixadas em `backend/gradle.lockfile`, e a distribuição Gradle está fixada no Wrapper.
 
+## Publicar gratuitamente no Render + Neon
+
+O projeto inclui `render.yaml` e `Dockerfile.render` para publicar frontend e API
+juntos em um único **Web Service Free**. O PostgreSQL já criado no Neon é configurado
+no painel por `DB_URL`, `DB_USER` e `DB_PASSWORD`; nenhum segredo vai para o GitHub.
+O ambiente `production` exige conta por e-mail/senha, usa CSRF e sessões persistidas
+no PostgreSQL. Novo login recupera a jornada atual em outro aparelho.
+
+Siga o [passo a passo de publicação](docs/DEPLOY_RENDER.md). O exemplo de variáveis
+está em `.env.production.example`. Validação local da imagem de nuvem, com banco
+separado e limite de 512 MB:
+
+```bash
+docker compose -p rua5-deploy-validation -f compose.deploy-test.yaml up -d --build --wait
+cd frontend
+npm run test:deploy
+```
+
+Abra `http://localhost:5176`. O Compose de desenvolvimento descrito abaixo conserva
+o fluxo local sem login. Limites dos serviços gratuitos e retomada após reinício
+estão documentados no guia.
+
 ## Rodar tudo com Docker Compose
 
 Com Docker e o plugin Compose instalados, execute na raiz:
@@ -128,8 +150,9 @@ E2E_REUSE_BACKEND=1 npm run test:e2e -- mobile.spec.ts --workers=1
 
 ## API do Milestone 1
 
-Enquanto a autenticação não é ativada, o backend associa o perfil a uma sessão HTTP criada
-pelo próprio servidor. O cliente não envia nem escolhe um `profileId`. Exemplo com `curl`:
+No desenvolvimento local sem login, o backend associa o perfil a uma sessão HTTP criada
+pelo próprio servidor e persistida no PostgreSQL. Em produção, deriva o perfil da conta
+autenticada. O cliente não envia nem escolhe um `profileId`. Exemplo local com `curl`:
 
 ```bash
 curl -c /tmp/jogorua-cookie -H 'Content-Type: application/json' \
@@ -213,8 +236,9 @@ de cabelo preto e uniforme de educação física; os atletas entram apenas nas p
 
 CONTINUAR fica disponível quando há um perfil na sessão e retoma o progresso do
 PostgreSQL e a posição local na rua ou interior. INICIAR cria outra jornada, sem
-apagar registros anteriores. OPÇÕES permanece desabilitado. A sessão atual ainda
-não é uma conta persistente entre reinícios do backend ou dispositivos.
+apagar registros anteriores. OPÇÕES permanece desabilitado. Sessões persistem entre
+reinícios do backend. Em produção, a conta por e-mail/senha permite retomar a jornada
+atual em outro dispositivo; no modo local, depende do cookie.
 
 - **Setas / WASD:** caminhar; vá à direita até Nilo na quadra.
 - Ao entrar na área à frente de um desafiante, o personagem para, o NPC caminha até ele e a fala abre após a aproximação, uma vez por entrada na área.
@@ -619,3 +643,32 @@ cansaço recuperado. Ao terminar, o atleta fica disponível automaticamente.
 A V25 persiste tratamentos e recibos idempotentes e amplia as posições de dispensa
 para a trilha do sul. Testes: `RecoveryIntegrationTest`, `RecoveryPolicyTest` e
 `frontend/e2e/recovery.spec.ts`. Decisão: `docs/decisions/ADR-0016-recovery-center.md`.
+
+
+## Orientações do treinador durante os duelos
+
+A interface usa o motor incremental v4: cinco trechos, com pausa para escolher ritmo
+(Cadenciar/Normal/Apressar) e postura (Defensivo/Equilibrado/Ofensivo). O relógio para
+na orientação. Desmarcar “Pausar para orientar” mantém o jogo contínuo; instruções
+alteradas durante a animação entram no próximo trecho. Apressar cria mais ações e
+mais desgaste; cadenciar conserva a posse e o fôlego. Postura troca força de ataque
+por defesa. Cansaço cresce dentro da partida e depende do esforço e do físico.
+
+CONTINUAR retoma um duelo incompleto salvo no PostgreSQL. XP, recrutamento e avanço
+do estádio só acontecem ao concluir. Pular resolve o restante com as instruções
+selecionadas. Respostas perdidas oferecem recuperação do mesmo comando, sem avançar
+ou premiar duas vezes. Não se pode iniciar outra atividade enquanto o duelo está ativo.
+Endpoints antigos e resultados históricos são preservados. Ver
+[ADR-0018](docs/decisions/ADR-0018-coached-duel-steps.md).
+
+Validação específica:
+
+```bash
+cd backend
+./gradlew test --tests 'com.streetfootball.game.match.domain.*' --tests 'com.streetfootball.game.CoachedMatchIntegrationTest'
+cd ../frontend
+npm test
+npm run lint
+npm run build
+npm run test:e2e -- coaching.spec.ts --workers=1
+```

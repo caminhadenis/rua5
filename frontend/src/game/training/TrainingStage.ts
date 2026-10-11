@@ -27,7 +27,6 @@ export function trainingStage(player: RosterPlayer, focus: TrainingFocus): HTMLE
     <div class="training-partner"><span class="training-sprite"></span><small>Parceiro</small></div>
     <div class="training-athlete"><span class="training-sprite"></span><small></small></div>
     <div class="training-ball"></div>
-    <div class="training-progress"></div>
     <div class="training-clock">5 s</div>`
   const athlete = stage.querySelector<HTMLElement>('.training-athlete .training-sprite')!
   const starter = player.playerDefinitionId.startsWith('starter_')

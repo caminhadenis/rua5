@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:3}
+      minimum-idle: 0
+      connection-timeout: 30000
+  web:
+    error:
+      include-message: never
+      include-stacktrace: never
+      include-binding-errors: never
+
+server:
+  address: 0.0.0.0
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true
+        same-site: lax

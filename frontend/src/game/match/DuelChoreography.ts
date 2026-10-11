@@ -32,7 +32,7 @@ export function choreographyFor(event: MatchEvent): DuelChoreography {
   } else if (event.type === 'TACKLE') {
     actions[actor] = 'tackle'
     actions[defender] = 'stumble'
-  } else if (['SHOT', 'SHOT_MISSED', 'GOAL', 'SAVE', 'PENALTY_GOAL', 'PENALTY_MISSED'].includes(event.type)) {
+  } else if (['SHOT', 'SHOT_MISSED', 'SHOT_BLOCKED', 'GOAL', 'SAVE', 'PENALTY_GOAL', 'PENALTY_MISSED'].includes(event.type)) {
     actions[actor] = 'shoot'
     actions[defender] = 'react'
   }

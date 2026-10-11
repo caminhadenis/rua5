@@ -1,0 +1,20 @@
+# Existing PostgreSQL is configured in the dashboard; no database is created here.
+services:
+  - type: web
+    name: rua5
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: production
+      - key: JAVA_TOOL_OPTIONS
+        value: -Xms64m -Xmx256m
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false

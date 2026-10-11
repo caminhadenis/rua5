@@ -38,6 +38,14 @@ class MatchRepository(
     private val jdbc: JdbcTemplate,
     private val json: ObjectMapper,
 ) {
+    fun requireIdle(profileId: UUID) {
+        if (jdbc.queryForObject("SELECT count(*) FROM coached_match WHERE profile_id = ? AND NOT finished", Int::class.java, profileId)!! >
+            0
+        ) {
+            throw CoachedMatchException("MATCH_IN_PROGRESS")
+        }
+    }
+
     fun findByKey(
         profileId: UUID,
         key: UUID,

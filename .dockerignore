@@ -1,0 +1,15 @@
+.git
+**/.env
+**/.env.*
+**/.gradle
+**/.kotlin
+**/build
+**/node_modules
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
+**/*.log
+.idea
+.vscode

@@ -1,8 +1,10 @@
 import { startOpening, continueGame, finishStarterGuidance } from './helpers/opening'
+import { finishedDuel, finishedStadium } from './helpers/coachedMatch'
+import type { CoachedResponse } from '../src/api/coachedMatches'
 import { persistentRoster } from './helpers/roster'
 import { expect, test, type Page } from '@playwright/test'
 import { talkToStadiumCoach } from './stadiumHelpers'
-import type { DuelResponse, RosterPlayer, StadiumResponse } from '../src/api/gameApi'
+import type { RosterPlayer } from '../src/api/gameApi'
 
 async function state(page: Page) {
   return page.evaluate(async () => {
@@ -48,12 +50,12 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
   const roster = () => page.request.get('/api/v1/roster').then(r => r.json()) as Promise<RosterPlayer[]>
   const [starter] = await roster()
   expect(await roster()).toHaveLength(1)
-  const duelReceipts: DuelResponse[] = []
+  const duelReceipts: CoachedResponse[] = []
   const duelKeys: string[] = []
-  await page.route('**/challenges/*/matches', async route => {
+  await page.route('**/challenges/*/coached-matches', async route => {
     // Lose a committed response; retries must recover it without a second XP award.
     const response = await route.fetch()
-    duelReceipts.push(await response.json() as DuelResponse)
+    duelReceipts.push(await response.json() as CoachedResponse)
     duelKeys.push(route.request().headers()['idempotency-key']!)
     if (duelReceipts.length === 1) await route.abort('failed')
     else await route.fulfill({ response })
@@ -83,6 +85,7 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
       await page.getByRole('button', { name: 'Iniciar desafio' }).click()
       if (index === 0 && attempt === 0) {
         await page.getByRole('button', { name: 'Tentar novamente', exact: true }).click()
+        await page.getByRole('button', { name: 'Continuar partida', exact: true }).click()
         await expect(page.getByTestId('current-event')).toHaveAttribute('data-sequence', /[1-9]/)
         const first = Number(await page.getByTestId('current-event').getAttribute('data-sequence'))
         await expect.poll(async () => Number(await page.getByTestId('current-event').getAttribute('data-sequence'))).toBeGreaterThan(first)
@@ -90,7 +93,7 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
         expect(duelKeys[0]).toBe(duelKeys[1])
       }
       await page.getByRole('button', { name: 'Pular', exact: true }).click()
-      const result = duelReceipts.at(-1)!
+      const result = await finishedDuel(page, duelReceipts.at(-1)!.match.id)
       const current = (await roster()).find(p => p.id === starter!.id)!
       expect(current.xp).toBe(result.rewards!.currentXp)
       expect(current.level).toBe(result.rewards!.currentLevel)
@@ -103,7 +106,9 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
     }
     expect(won, `Recruit ${name} using real simulation`).toBe(true)
     await page.getByRole('button', { name: 'Convidar para o time' }).click()
-    await expect(page.getByRole('region', { name: `Recrutamento · ${name}` })).toContainText(`${name} entrou para o seu time!`)
+    await expect(page.getByRole('region', { name: `Recrutamento · ${name}` })).toContainText('Valeu por me chamar para o seu time!')
+    await expect(page.getByRole('region', { name: 'Equipe', exact: true })).toBeVisible()
+    await expect(page.getByRole('radio')).toHaveCount(index + 2)
     const members = await roster()
     expect(members).toHaveLength(index + 2)
     expect(new Set(members.map(p => p.playerDefinitionId)).size).toBe(members.length)
@@ -129,11 +134,11 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
   await page.keyboard.press('e', { delay: 80 })
   await talkToStadiumCoach(page)
   await expect(page.getByText('Professor Dimas · treinador', { exact: true })).toBeVisible()
-  const stadiumReceipts: StadiumResponse[] = []
+  const stadiumReceipts: CoachedResponse[] = []
   const stadiumKeys: string[] = []
-  await page.route('**/stadiums/*/matches', async route => {
+  await page.route('**/stadiums/*/coached-matches', async route => {
     const response = await route.fetch()
-    stadiumReceipts.push(await response.json() as StadiumResponse)
+    stadiumReceipts.push(await response.json() as CoachedResponse)
     stadiumKeys.push(route.request().headers()['idempotency-key']!)
     if (stadiumReceipts.length === 1) await route.abort('failed')
     else await route.fulfill({ response })
@@ -147,7 +152,7 @@ test('authoritative MVP: new profile → explore → recruit four → roster →
     await expect(page.locator('.stadium-fan')).toHaveCount(16)
     if (duel === 0) await page.screenshot({ path: testInfo.outputPath('m7-stadium-pitch.png') })
     await page.getByRole('button', { name: 'Pular', exact: true }).click()
-    const result = stadiumReceipts.at(-1)!
+    const result = await finishedStadium(page, stadiumReceipts.at(-1)!.match.id)
     won = Boolean(result.rewards.trophy)
     if (won) {
       expect(result.rewards.series.wins).toBe(5)

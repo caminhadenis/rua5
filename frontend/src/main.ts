@@ -12,6 +12,8 @@ import { InteriorScene } from './game/scenes/InteriorScene'
 import './style.css'
 import './mobile-panels.css'
 import './opening.css'
+import './account.css'
+import './coaching.css'
 import { gameAudio } from './game/audio/GameAudio'
 import { installMobileViewport } from './game/input/mobileViewport'
 

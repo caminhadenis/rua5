@@ -41,6 +41,7 @@ export function presentEvent(event: MatchEvent, participants: Participant[]): st
     PENALTY_GOAL: 'converteu o pênalti!', PENALTY_MISSED: 'perdeu o pênalti!',
     POSSESSION: 'ficou com a bola.', DRIBBLE_SUCCESS: 'passou pelo marcador!',
     TACKLE: 'roubou a bola!', SHOT: 'chutou…', SHOT_MISSED: 'chutou para fora!', GOAL: 'marcou um GOL!',
+    HOLD: 'protegeu a bola e cadenciou o jogo.', SHOT_BLOCKED: 'teve o chute bloqueado pelo marcador!',
   }[event.type]
   return `${event.minute}' ${actor} ${text}`
 }

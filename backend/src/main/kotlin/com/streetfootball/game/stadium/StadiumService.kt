@@ -4,12 +4,15 @@ import com.streetfootball.game.challenge.IdempotencyConflictException
 import com.streetfootball.game.challenge.OwnedPlayerNotFoundException
 import com.streetfootball.game.challenge.PlayerNotOwnedException
 import com.streetfootball.game.match.MatchRepository
+import com.streetfootball.game.match.PreparedDuel
 import com.streetfootball.game.match.StoredMatch
+import com.streetfootball.game.match.domain.CoachedDuelEngine
 import com.streetfootball.game.match.domain.MatchEngine
 import com.streetfootball.game.match.domain.MatchMode
 import com.streetfootball.game.match.domain.MatchOutcome
 import com.streetfootball.game.match.domain.MatchParticipant
 import com.streetfootball.game.match.domain.MatchRequest
+import com.streetfootball.game.match.domain.MatchResult
 import com.streetfootball.game.match.domain.StadiumDuelEngine
 import com.streetfootball.game.match.snapshot
 import com.streetfootball.game.profile.GameProfileEntity
@@ -151,6 +154,19 @@ class StadiumService(
             }
             return it
         }
+        matches.requireIdle(profileId)
+        val prepared = prepare(profileId, id, command)
+        return complete(prepared, key, engine.simulate(prepared.request))
+    }
+
+    @Transactional
+    fun prepare(
+        profileId: UUID,
+        id: String,
+        command: StadiumDuelCommand,
+        version: String = StadiumDuelEngine.VERSION,
+    ): PreparedDuel {
+        val profile = profiles.findByIdForUpdate(profileId) ?: throw ProfileNotFoundException()
         val stadium = stadiums.find(id)
         val ownedTrophies = trophies.ownedIds(profileId)
         StadiumPolicy.validate(
@@ -170,12 +186,69 @@ class StadiumService(
         val attempt = latest?.takeUnless { it.finished } ?: series.start(profileId, id, opponents(stadium))
         val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
         player.requireAvailable(now)
-        val home = listOf(definition.snapshot(player.id.toString(), player.level, player, player.fatigueAt(now)))
+        val home =
+            listOf(
+                definition.snapshot(
+                    player.id.toString(),
+                    player.level,
+                    player,
+                    if (version ==
+                        CoachedDuelEngine.VERSION
+                    ) {
+                        0.0
+                    } else {
+                        player.fatigueAt(now)
+                    },
+                ),
+            )
         val input =
-            MatchRequest(MatchMode.STADIUM_1V1, home, listOf(attempt.opponents[round - 1]), seeds.nextLong(), StadiumDuelEngine.VERSION)
-        val started = System.nanoTime()
-        val result = engine.simulate(input)
+            MatchRequest(
+                MatchMode.STADIUM_1V1,
+                home,
+                listOf(attempt.opponents[round - 1]),
+                seeds.nextLong(),
+                version,
+                homeInitialFatigue =
+                    if (version ==
+                        CoachedDuelEngine.VERSION
+                    ) {
+                        player.fatigueAt(now)
+                    } else {
+                        0.0
+                    },
+            )
+        return PreparedDuel(
+            profileId,
+            player.id,
+            input,
+            player.fatigueAt(now),
+            0.0,
+            stadiumId = id,
+            seriesId = attempt.id,
+            roundNumber = round,
+            expectedSeriesId = command.seriesId,
+        )
+    }
+
+    @Transactional
+    fun complete(
+        prepared: PreparedDuel,
+        key: UUID,
+        result: MatchResult,
+        matchId: UUID = UUID.randomUUID(),
+        fatigueCost: Int? = null,
+    ): StoredMatch {
         check(result.outcome != MatchOutcome.DRAW)
+        val profileId = prepared.profileId
+        val id = requireNotNull(prepared.stadiumId)
+        val stadium = stadiums.find(id)
+        val player = ownedPlayers.findById(prepared.ownedPlayerId).orElseThrow(::OwnedPlayerNotFoundException)
+        val attempt = requireNotNull(series.latest(profileId, id))
+        check(attempt.id == prepared.seriesId && attempt.played + 1 == prepared.roundNumber && !attempt.finished)
+        val round = requireNotNull(prepared.roundNumber)
+        val input = prepared.request
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        val started = System.nanoTime()
         val attempts = stadiums.attempts(profileId, id)
         val awards =
             listOf(player).map { player ->
@@ -191,7 +264,13 @@ class StadiumService(
                         player.xp,
                         advanced.xp,
                         if (advanced.level < Progression.MAX_LEVEL) Progression.xpForNextLevel(advanced.level) else null,
-                        player.addFatigue(FatiguePolicy.DUEL_COST, now),
+                        if (fatigueCost ==
+                            null
+                        ) {
+                            player.addFatigue(FatiguePolicy.DUEL_COST, now)
+                        } else {
+                            player.finishCoachedFatigue(prepared.homeFatigue, fatigueCost, now)
+                        },
                     )
                 player.level = advanced.level
                 player.xp = advanced.xp
@@ -202,7 +281,7 @@ class StadiumService(
         val rewards = StadiumRewards(awards, if (next.wins == 5) trophies.definition(stadium.trophyId) else null, next.progress())
         val stored =
             StoredMatch(
-                UUID.randomUUID(),
+                matchId,
                 profileId,
                 null,
                 player.id,
@@ -214,7 +293,7 @@ class StadiumService(
                 stadiumRewards = rewards,
                 seriesId = attempt.id,
                 roundNumber = round,
-                expectedSeriesId = command.seriesId,
+                expectedSeriesId = prepared.expectedSeriesId,
             )
         matches.insert(stored)
         if (rewards.trophy != null) trophies.grant(profileId, stadium.trophyId, id, stored.id, stored.createdAt, attempt.id)

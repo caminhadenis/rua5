@@ -3,6 +3,7 @@ package com.streetfootball.game.progression
 import com.streetfootball.game.challenge.IdempotencyConflictException
 import com.streetfootball.game.challenge.OwnedPlayerNotFoundException
 import com.streetfootball.game.challenge.PlayerNotOwnedException
+import com.streetfootball.game.match.MatchRepository
 import com.streetfootball.game.profile.GameProfileRepository
 import com.streetfootball.game.profile.ProfileNotFoundException
 import com.streetfootball.game.roster.OwnedPlayerRepository
@@ -34,6 +35,7 @@ data class RecoveryReceipt(
 @Service
 class RecoveryService(
     private val profiles: GameProfileRepository,
+    private val matches: MatchRepository,
     private val owned: OwnedPlayerRepository,
     private val jdbc: JdbcTemplate,
     private val json: ObjectMapper,
@@ -47,6 +49,7 @@ class RecoveryService(
     ): RecoveryReceipt {
         profiles.findByIdForUpdate(profileId) ?: throw ProfileNotFoundException()
         prior(profileId, key, "START", playerId, stationId)?.let { return it }
+        matches.requireIdle(profileId)
         val method = RecoveryPolicy.stations[stationId] ?: throw RecoveryRuleException("RECOVERY_STATION_NOT_FOUND")
         val player = owned.findById(playerId).orElseThrow(::OwnedPlayerNotFoundException)
         if (player.profileId != profileId) throw PlayerNotOwnedException()

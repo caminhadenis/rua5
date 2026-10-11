@@ -86,14 +86,17 @@ class FatigueIntegrationTest {
         val legacy = body(send(p.client, "POST", "/training/sessions", payload, key))
         assertEquals(trainedAt.plusSeconds(180).toString(), legacy["nextAvailableAt"].asString())
         body(send(p.client, "POST", "/training/sessions", payload + ("focus" to "SPEED"), UUID.randomUUID()))
-        for (value in listOf(24.0, 54.0, 84.0, 100.0)) {
+        for ((value, gain) in listOf(24.0 to 0.25, 54.0 to 0.20, 84.0 to 0.15, 100.0 to 0.05)) {
             fatigue(p, value)
-            val next = body(send(p.client, "POST", "/training/sessions", payload, UUID.randomUUID()))
+            val nextKey = UUID.randomUUID()
+            val next = body(send(p.client, "POST", "/training/sessions", payload, nextKey))
             assertTrue(
                 next["fatigue"]["after"]["value"].asDouble() in (value + 11.9).coerceAtMost(100.0)..(value + 12.0).coerceAtMost(100.0),
             )
             assertEquals(0, body(send(p.client, "GET", "/training/status"))["cooldowns"].size())
             assertEquals(0, next["xpAwarded"].asInt())
+            assertEquals(gain, next["statAfter"].asDouble() - next["statBefore"].asDouble(), 0.000001)
+            assertEquals(next, body(send(p.client, "POST", "/training/sessions", payload, nextKey)))
         }
         val storedFatigue = jdbc.queryForObject("SELECT fatigue FROM owned_player WHERE id = ?", Double::class.java, p.id)
         assertEquals(legacy, body(send(p.client, "POST", "/training/sessions", payload, key)))
@@ -106,11 +109,30 @@ class FatigueIntegrationTest {
         )
         val other = body(send(p.client, "POST", "/training/sessions", payload + ("ownedPlayerId" to otherId.toString()), UUID.randomUUID()))
         assertEquals(12.0, other["fatigue"]["after"]["value"].asDouble())
-        jdbc.update("UPDATE owned_player SET training_dribbling = 392 WHERE id = ?", p.id)
+        jdbc.update("UPDATE owned_player SET training_dribbling = 9800 WHERE id = ?", p.id)
         val maxed = send(p.client, "POST", "/training/sessions", payload, UUID.randomUUID())
         assertEquals(409, maxed.statusCode())
         assertEquals("TRAINING_STAT_MAX", json.readTree(maxed.body())["code"].asString())
         assertEquals(storedFatigue, jdbc.queryForObject("SELECT fatigue FROM owned_player WHERE id = ?", Double::class.java, p.id))
+    }
+
+    @Test
+    fun `training uses naturally recovered fatigue before adding the drill cost`() {
+        val p = player()
+        fatigue(p, 100.0, 1500)
+        val receipt =
+            body(
+                send(
+                    p.client,
+                    "POST",
+                    "/training/sessions",
+                    mapOf("ownedPlayerId" to p.id.toString(), "focus" to "SPEED"),
+                    UUID.randomUUID(),
+                ),
+            )
+        assertEquals("RESTED", receipt["fatigue"]["before"]["condition"].asString())
+        assertEquals(0.25, receipt["statAfter"].asDouble() - receipt["statBefore"].asDouble())
+        assertEquals(12.0, receipt["fatigue"]["after"]["value"].asDouble())
     }
 
     @Test
@@ -185,6 +207,17 @@ class FatigueIntegrationTest {
             )
             assertEquals(0.0, roster(p)["fatigue"]["value"].asDouble())
             assertEquals(0, roster(p)["xp"].asInt())
+            val training =
+                send(
+                    p.client,
+                    "POST",
+                    "/training/sessions",
+                    mapOf("ownedPlayerId" to p.id.toString(), "focus" to "SPEED"),
+                    UUID.randomUUID(),
+                )
+            assertEquals(500, training.statusCode())
+            assertEquals(0, jdbc.queryForObject("SELECT training_speed FROM owned_player WHERE id = ?", Int::class.java, p.id))
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM training_session WHERE owned_player_id = ?", Int::class.java, p.id))
         } finally {
             jdbc.execute("ALTER TABLE owned_player DROP CONSTRAINT $constraint")
         }

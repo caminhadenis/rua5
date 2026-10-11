@@ -2,6 +2,7 @@ import { ApiError, RecoveryCommand, teamApi, type RosterPlayer, type RecoveryRec
 import type Phaser from 'phaser'
 import type { RecoveryStation } from '../maps/recoveryCenter'
 import { PlayerCards } from './PlayerCards'
+import { energyIndicator } from './fatigue'
 import { button, paragraph, scenePanel } from './ScenePanel'
 
 const command = new RecoveryCommand()
@@ -42,7 +43,8 @@ export async function openRecoveryPanel(
     panel.append(title)
     paragraph(panel, 'Recupera todo o cansaço em 5 segundos, tanto na maca quanto no banho de gelo.').className = 'selection-description'
     if (occupant) {
-      paragraph(panel, `${occupant.name} está em tratamento. Cansaço: ${Math.ceil(occupant.fatigue?.value ?? 0)}/100.`)
+      paragraph(panel, `${occupant.name} está em tratamento.`)
+      panel.append(energyIndicator(occupant.fatigue, true))
       paragraph(panel, `Disponível às ${new Date(occupant.recovery!.completesAt).toLocaleTimeString('pt-BR')}. Você pode explorar o bairro enquanto ele descansa.`)
       action = 'CANCEL'
     } else {

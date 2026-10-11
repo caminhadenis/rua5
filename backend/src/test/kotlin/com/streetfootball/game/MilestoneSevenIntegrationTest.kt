@@ -151,7 +151,7 @@ class MilestoneSevenIntegrationTest {
                     schema,
                 ),
             )
-            assertEquals(7, upgrade.queryForObject("SELECT training_dribbling FROM owned_player WHERE id = ?", Int::class.java, playerId))
+            assertEquals(175, upgrade.queryForObject("SELECT training_dribbling FROM owned_player WHERE id = ?", Int::class.java, playerId))
             assertEquals(42, upgrade.queryForObject("SELECT xp FROM owned_player WHERE id = ?", Int::class.java, playerId))
             assertEquals(3, upgrade.queryForObject("SELECT level FROM owned_player WHERE id = ?", Int::class.java, playerId))
             assertEquals(listOf("DRIBBLING"), upgrade.queryForList("SELECT focus FROM training_session", String::class.java))
@@ -229,9 +229,9 @@ class MilestoneSevenIntegrationTest {
                 playerId,
             )
             flyway().migrate()
-            for ((stat, quarters) in listOf("speed" to 8, "dribbling" to 12, "physical" to 392)) {
+            for ((stat, hundredths) in listOf("speed" to 200, "dribbling" to 300, "physical" to 9800)) {
                 assertEquals(
-                    quarters,
+                    hundredths,
                     upgrade.queryForObject("SELECT training_$stat FROM owned_player WHERE id = ?", Int::class.java, playerId),
                 )
             }
@@ -286,6 +286,27 @@ class MilestoneSevenIntegrationTest {
             val stadium = "/stadiums/benfica_stadium"
             assertEquals("AVAILABLE", body(send(client, "GET", stadium))["status"].asString())
             body(send(client, "PUT", "/lineup", mapOf("ownedPlayerIds" to ids)))
+            // This smoke verifies HTTP progression, not luck across a thousand exhausted duels.
+            // Prepare each starter through real training commands; balance is tested separately.
+            for (focus in listOf("SPEED", "DRIBBLING", "FINISHING", "DEFENDING", "PHYSICAL")) {
+                var stat = body(send(client, "GET", "/roster")).first { it["id"] == chosen["id"] }["stats"][focus.lowercase()].asDouble()
+                while (stat < 99.0) {
+                    val trained =
+                        body(
+                            send(
+                                client,
+                                "POST",
+                                "/training/sessions",
+                                mapOf(
+                                    "ownedPlayerId" to chosen["id"].asString(),
+                                    "focus" to focus,
+                                ),
+                                UUID.randomUUID(),
+                            ),
+                        )
+                    stat = trained["statAfter"].asDouble()
+                }
+            }
             var trophyWon = false
             for (duel in 1..1000) {
                 val info = body(send(client, "GET", stadium))
@@ -396,7 +417,8 @@ class MilestoneSevenIntegrationTest {
         for (session in 2..5) {
             latest = body(send(client, "POST", path, payload, UUID.randomUUID()))
             assertEquals(0, latest["progressAfter"].asInt())
-            assertEquals(before["stats"]["dribbling"].asDouble() + session * 0.25, latest["statAfter"].asDouble())
+            val gain = if (session <= 3) 0.25 else 0.20
+            assertEquals(gain, latest["statAfter"].asDouble() - latest["statBefore"].asDouble(), 0.000001)
             assertEquals(before["level"], latest["currentLevel"])
             assertEquals(before["xp"], latest["currentXp"])
         }
@@ -415,7 +437,7 @@ class MilestoneSevenIntegrationTest {
         val otherFocus = body(send(client, "POST", path, payload + ("focus" to "FINISHING"), UUID.randomUUID()))
         assertEquals(0, otherFocus["progressBefore"].asInt())
         assertEquals(0, otherFocus["progressAfter"].asInt())
-        assertEquals(otherFocus["statBefore"].asDouble() + 0.25, otherFocus["statAfter"].asDouble())
+        assertEquals(otherFocus["statBefore"].asDouble() + 0.20, otherFocus["statAfter"].asDouble(), 0.000001)
         val otherAthlete =
             body(send(client, "POST", path, mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING"), UUID.randomUUID()))
         assertEquals(0, otherAthlete["progressBefore"].asInt())
@@ -437,10 +459,10 @@ class MilestoneSevenIntegrationTest {
         )
         val cappedPayload = mapOf("ownedPlayerId" to secondPlayer.toString(), "focus" to "DRIBBLING")
         val baseDribbling = definitions.findById("starter_rafa").orElseThrow().dribbling
-        jdbc.update("UPDATE owned_player SET training_dribbling = ? WHERE id = ?", (99 - baseDribbling) * 4 - 1, secondPlayer)
+        jdbc.update("UPDATE owned_player SET training_dribbling = ? WHERE id = ?", (99 - baseDribbling) * 100 - 5, secondPlayer)
         val capKey = UUID.randomUUID()
         val capped = body(send(client, "POST", path, cappedPayload, capKey))
-        assertEquals(98.75, capped["statBefore"].asDouble())
+        assertEquals(98.95, capped["statBefore"].asDouble())
         assertEquals(99.0, capped["statAfter"].asDouble())
         val maxed = send(client, "POST", path, cappedPayload, UUID.randomUUID())
         assertEquals(409, maxed.statusCode())

@@ -1,6 +1,6 @@
 import { continueGame } from './helpers/opening'
 import { expect, test } from '@playwright/test'
-import type { DuelResponse, RosterPlayer } from '../src/api/gameApi'
+import type { RosterPlayer } from '../src/api/gameApi'
 import { expectPanelFits } from './helpers/mobilePanel'
 
 for (const viewport of [{ width: 667, height: 375 }, { width: 568, height: 320 }]) {
@@ -19,10 +19,10 @@ for (const viewport of [{ width: 667, height: 375 }, { width: 568, height: 320 }
         const response = await route.fetch()
         await route.fulfill({ json: { ...await response.json(), recruitmentStatus: 'AVAILABLE', recruitable: true } })
       })
-      await page.route('**/api/v1/challenges/*/matches', async route => {
+      await page.route('**/api/v1/coached-matches/*/advance', async route => {
         const response = await route.fetch()
-        const result = await response.json() as DuelResponse
-        await route.fulfill({ json: { ...result, match: { ...result.match, outcome: 'WIN', homeScore: 2, awayScore: 0 }, rewards: { ...result.rewards, previousLevel: 1, currentLevel: 2, recruitmentUnlocked: true } } })
+        const result = await response.json()
+        await route.fulfill({ json: result.finished ? { ...result, match: { ...result.match, outcome: 'WIN', homeScore: 2, awayScore: 0 }, rewards: { ...result.rewards, previousLevel: 1, currentLevel: 2, recruitmentUnlocked: true } } : result })
       })
       await page.goto('/')
       await continueGame(page)

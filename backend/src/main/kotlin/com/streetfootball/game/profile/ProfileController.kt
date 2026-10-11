@@ -1,6 +1,5 @@
 package com.streetfootball.game.profile
 
-import com.streetfootball.game.challenge.IdempotencyConflictException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -22,6 +21,7 @@ import java.util.UUID
 class ProfileController(
     private val profileService: ProfileService,
     private val profileSession: ProfileSession,
+    private val newGames: NewGameService,
 ) {
     @PostMapping("/profiles")
     @ResponseStatus(HttpStatus.CREATED)
@@ -33,7 +33,14 @@ class ProfileController(
             throw ProfileAlreadyExistsException()
         }
 
-        val profile = profileService.create(body.displayName, body.primaryColor, body.secondaryColor)
+        val profile =
+            profileService.create(
+                body.displayName,
+                body.primaryColor,
+                body.secondaryColor,
+                profileSession.currentUserId(request),
+                onlyIfEmpty = true,
+            )
         profileSession.attach(request.getSession(true), profile.id)
         return profile.toResponse()
     }
@@ -46,24 +53,12 @@ class ProfileController(
         request: HttpServletRequest,
     ): ProfileResponse {
         val session = request.getSession(true)
-        synchronized(session) {
-            val previous = session.getAttribute("newGameCommand") as? NewGameCommand
-            if (previous?.key == key) {
-                if (previous.body != body) throw IdempotencyConflictException()
-                return profileService.load(previous.profileId).toResponse()
-            }
-            val profile = profileService.create(body.displayName, body.primaryColor, body.secondaryColor)
-            profileSession.attach(session, profile.id)
-            session.setAttribute("newGameCommand", NewGameCommand(key, body, profile.id))
-            return profile.toResponse()
-        }
+        val userId = profileSession.currentUserId(request)
+        val owner = userId?.let { "user:$it" } ?: "session:${session.id}"
+        val profile = newGames.start(owner, userId, key, body)
+        profileSession.attach(session, profile.id)
+        return profile.toResponse()
     }
-
-    private data class NewGameCommand(
-        val key: UUID,
-        val body: CreateProfileRequest,
-        val profileId: UUID,
-    ) : java.io.Serializable
 
     @GetMapping("/profile")
     fun load(request: HttpServletRequest): ProfileResponse = profileService.load(profileSession.requireProfileId(request)).toResponse()

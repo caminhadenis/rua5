@@ -127,7 +127,13 @@ class MilestoneThreeIntegrationTest {
             jdbc.queryForObject("SELECT level FROM owned_player", Int::class.java),
         )
         assertEquals(body.path("rewards").path("currentXp").asInt(), jdbc.queryForObject("SELECT xp FROM owned_player", Int::class.java))
-        assertEquals(25, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Int::class.java))
+        assertEquals(
+            3,
+            jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version IN ('27', '28', '29')",
+                Int::class.java,
+            ),
+        )
     }
 
     @Test

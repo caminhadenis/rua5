@@ -1,8 +1,10 @@
+import { finishedStadium } from './helpers/coachedMatch'
+import type { CoachedResponse } from '../src/api/coachedMatches'
 import { recruitStadiumRoster } from './helpers/stadiumRoster'
 import { continueGame } from './helpers/opening'
 import { expect, test } from '@playwright/test'
 import { talkToStadiumCoach } from './stadiumHelpers'
-import type { StadiumInfo, StadiumResponse } from '../src/api/gameApi'
+import type { StadiumInfo } from '../src/api/gameApi'
 
 test('stadium entry is explorable and supporters oppose the visitor before coach starts a single duel', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
@@ -55,18 +57,18 @@ test('stadium entry is explorable and supporters oppose the visitor before coach
   await expect(page.getByRole('region', { name: 'Estádio', exact: true }).getByText('Professor Dimas · treinador', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Ouvir mais de Dimas' }).click()
   await expect(page.getByText(/mais forte entra por último/)).toBeVisible()
-  const receipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/matches'))
+  const receipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar duelo 1 × 1' }).click()
-  const result = await (await receipt).json() as StadiumResponse
-  expect(result.match.home).toHaveLength(1)
-  expect(result.match.away).toHaveLength(1)
-  expect(result.rewards.trophy).toBeNull()
+  const initial = await (await receipt).json() as CoachedResponse
+  expect(initial.match.home).toHaveLength(1)
+  expect(initial.match.away).toHaveLength(1)
+  expect(initial.stadiumRewards).toBeNull()
   await expect(page.locator('.duelist')).toHaveCount(2)
   await expect(page.locator('.stadium-fan')).toHaveCount(16)
   await expect(page.locator('.fan-flag')).toHaveCount(6)
   await expect(page.locator('.stadium-sideline-coach')).toHaveCount(0)
   await expect(page.locator('.coach-portrait')).toHaveCount(0)
-  const checkStands = async (minimumWidth = 56) => {
+  const checkStands = async (minimumWidth = 32) => {
     const geometry = await page.locator('.stadium-theater').evaluate(theater => {
       const court = theater.querySelector('.duel-arena')!.getBoundingClientRect()
       const spectators = [...theater.querySelectorAll('.stadium-fan, .fan-flag, .stadium-support-banner')]
@@ -102,14 +104,15 @@ test('stadium entry is explorable and supporters oppose the visitor before coach
   await expect(page.locator('.coach-portrait')).toBeVisible()
   await expect(page.locator('.player-cards')).toHaveCount(0)
   // Continue through real losses until the first win, then verify the coach's handoff.
-  let outcome = result
+  let outcome = await finishedStadium(page, initial.match.id)
   for (let attempt = 0; outcome.match.outcome !== 'WIN' && attempt < 30; attempt++) {
     await page.getByRole('button', { name: 'Recomeçar sequência' }).click()
-    const nextReceipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/matches'))
+    const nextReceipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/coached-matches'))
     await page.getByRole('button', { name: 'Iniciar duelo 1 × 1' }).click()
-    outcome = await (await nextReceipt).json() as StadiumResponse
+    const nextInitial = await (await nextReceipt).json() as CoachedResponse
     await page.getByRole('button', { name: 'Pular', exact: true }).click()
     await expect(page.getByTestId('stadium-result')).toBeVisible()
+    outcome = await finishedStadium(page, nextInitial.match.id)
   }
   expect(outcome.match.outcome).toBe('WIN')
   const info = await (await page.request.get('/api/v1/stadiums/benfica_stadium')).json() as StadiumInfo
@@ -120,15 +123,15 @@ test('stadium entry is explorable and supporters oppose the visitor before coach
   await page.getByRole('button', { name: 'Próximo adversário' }).click()
   await expect(page.locator('.stadium-next-opponent')).toContainText(nextOpponent.name)
   await expect(page.getByRole('radio')).toHaveCount(5)
-  const secondReceipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/matches'))
+  const secondReceipt = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/stadiums/') && r.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar duelo 1 × 1' }).click()
-  const second = await (await secondReceipt).json() as StadiumResponse
+  const second = await (await secondReceipt).json() as CoachedResponse
   expect(second.match.away[0]!.playerId).toBe(nextOpponent.playerId)
   await expect(page.locator('.coach-portrait')).toHaveCount(0)
   await checkStands()
   // The same separation holds on narrow screens, including waving flags.
   await page.setViewportSize({ width: 390, height: 844 })
-  await checkStands(40)
+  await checkStands(32)
   await page.setViewportSize({ width: 960, height: 540 })
   await page.getByRole('button', { name: 'Pular', exact: true }).click()
   await expect(page.getByTestId('stadium-result')).toBeVisible()

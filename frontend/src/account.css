@@ -1,0 +1,36 @@
+.account-form {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 360px);
+  margin-inline: auto;
+}
+
+.account-form label {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.account-form input {
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 2px solid #f7d154;
+  background: #17292d;
+  color: #fff;
+  font: inherit;
+}
+
+.account-form p { margin: 0; }
+.account-email { overflow-wrap: anywhere; }
+.account-logout { min-height: 44px; }
+.title-menu nav[hidden] { display: none; }
+
+html.is-phone .title-menu:has(.account-form) {
+  justify-content: start;
+  padding-block: 12px;
+  overflow-y: auto;
+}
+
+html.is-phone .account-form { gap: 6px; }

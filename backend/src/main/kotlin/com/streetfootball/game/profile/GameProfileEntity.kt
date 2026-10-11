@@ -13,6 +13,8 @@ import java.util.UUID
 class GameProfileEntity(
     @field:Id
     var id: UUID = UUID.randomUUID(),
+    @field:Column(name = "user_id")
+    var userId: UUID? = null,
     @field:Column(name = "display_name", nullable = false, length = 40)
     var displayName: String = "",
     @field:Column(name = "starter_selected", nullable = false)

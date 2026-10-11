@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fatigueReceiptText, fatigueRecoveryText, fatigueText } from './fatigue'
+import { fatigueRecoveryText, remainingEnergy } from './fatigue'
 import type { FatigueStatus } from '../../api/gameApi'
 
 const fatigue: FatigueStatus = {
@@ -8,14 +8,18 @@ const fatigue: FatigueStatus = {
 }
 
 describe('fatigue presentation', () => {
-  it('explains the authoritative condition and temporary attribute penalty', () => {
-    expect(fatigueText(fatigue)).toBe('Muito cansado · 68/100 · atributos −10%')
+  it('empties the battery with fatigue and refills it with recovery', () => {
+    expect(remainingEnergy({ ...fatigue, value: 0 })).toBe(100)
+    expect(remainingEnergy({ ...fatigue, value: 30 })).toBe(70)
+    expect(remainingEnergy(fatigue)).toBe(32)
+    expect(remainingEnergy({ ...fatigue, value: 100 })).toBe(0)
+    expect(remainingEnergy({ ...fatigue, value: 10 })).toBeGreaterThan(remainingEnergy(fatigue))
     expect(fatigueRecoveryText(fatigue, Date.parse('2026-10-05T12:00:00Z'))).toBe('Melhora de condição em 2min00s.')
   })
-  it('handles historical receipts and elapsed recovery times', () => {
-    expect(fatigueText()).toBe('Disposto · desempenho normal')
-    expect(fatigueText({ ...fatigue, value: 29.999, condition: 'RESTED', penaltyPercent: 0 })).toContain('29/100 · desempenho normal')
+  it('handles missing historical fatigue and bounds the battery', () => {
+    expect(remainingEnergy()).toBe(100)
+    expect(remainingEnergy({ ...fatigue, value: -1 })).toBe(100)
+    expect(remainingEnergy({ ...fatigue, value: 101 })).toBe(0)
     expect(fatigueRecoveryText(fatigue, Date.parse('2026-10-05T13:00:00Z'))).toContain('atualizando condição')
-    expect(fatigueReceiptText({ before: fatigue, after: fatigue, gained: 18, policyVersion: '1' })).toContain('Desgaste +18')
   })
 })

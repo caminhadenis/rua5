@@ -608,6 +608,10 @@ Não há edição posterior de cores nesta entrega.
 
 Na criação do jogo, o usuário escolhe um dentre três starters.
 As três opções exibem desenhos distintos do atleta já usando as cores confirmadas.
+Na última fala de despedida, Miguel indica a casa da Dona Amélia, a oeste da
+universidade, identificada pela placa TÁTICAS. Essa fala aparece após escolher
+explorar o bairro ou, ao aceitar o passeio, depois da apresentação da academia,
+antes de entrar nela ou explorar. Ela ensina a orientar o atleta durante os duelos.
 
 Sugestão:
 
@@ -673,8 +677,9 @@ Cada nível concede +1 em todos os atributos, limitado a 99. O nível 2 já prod
 melhora, sem alterar stats base ou resultados históricos. Modificadores por arquétipo
 abaixo são possibilidades futuras, não são aplicados no cálculo atual.
 `trainingBonus` é persistido no atleta possuído, começa em zero e aumenta apenas no
-fundamento treinado em +0,25 a cada sessão, respeitando o limite efetivo de 99.
-Os atributos efetivos aceitam quartos de ponto e influenciam imediatamente as partidas.
+fundamento treinado conforme a condição no início da sessão: +0,25 descansado, +0,20
+cansado, +0,15 muito cansado e +0,05 exausto, respeitando o limite efetivo de 99.
+Os atributos efetivos aceitam centésimos de ponto e influenciam imediatamente as partidas.
 O treino não concede XP nem altera o nível; level up continua dependendo do XP de partidas.
 
 O `archetypeModifier` pode variar por stat.
@@ -725,11 +730,23 @@ ou físico); a mensagem do treinador pergunta se o jogador quer treinar e inform
 fica em uma faixa compacta no alto da tela, fora da área do personagem.
 O frontend apresenta o atleta escolhido por cinco segundos na atividade correspondente:
 esteira, três cones, chutes a gol, perseguição ou musculação. Apenas um
-treino pode ocorrer por vez. Cada sessão concede +0,25 no atributo escolhido, sem XP,
-se o valor efetivo ainda for menor que 99. Quatro sessões somam +1; cada ganho fracionado
-já altera o atributo efetivo e o desempenho em partidas. Nível e XP não mudam.
-O valor atual e o ganho por sessão são mostrados na tela, e a treinadora da academia explica
-a regra em diálogo automático quando o jogador entra no prédio. O treino só pode ser
+treino pode ocorrer por vez. O ganho é definido pelo cansaço recuperado no relógio do
+backend antes de adicionar o desgaste da sessão:
+
+| Cansaço no início | Condição | Ganho no fundamento |
+|---|---|---|
+| 0 ≤ valor < 30 | Descansado | +0,25 |
+| 30 ≤ valor < 60 | Cansado | +0,20 |
+| 60 ≤ valor < 85 | Muito cansado | +0,15 |
+| 85 ≤ valor ≤ 100 | Exausto | +0,05 |
+
+O ganho é limitado ao que falta para 99 e já influencia as próximas partidas.
+Treinos não concedem XP nem alteram nível. Jo recebe o treinador automaticamente
+com uma orientação por fala, incluindo cada condição e ganho em uma fala própria;
+Enter/E ou Continuar no celular avança, Esc/Fechar encerra. Falar com Jo permite reler.
+A tela de treino mostra escolha do atleta, animação e confirmação curta. Não exibe
+os ganhos, atributos atuais ou comparação antes/depois; eles podem ser consultados
+na Equipe. A explicação dos ganhos aparece somente na introdução do centro. O treino só pode ser
 iniciado após conversar com o treinador do setor correspondente. Não há tempo de espera
 entre sessões, mesmo com o atleta exausto. Ao concluir os cinco segundos, o botão
 “Treinar novamente” permite outra sessão imediatamente. O desgaste continua seguindo
@@ -741,9 +758,29 @@ duelos e estádio passam a usar esse bônus; partidas históricas não mudam. Tr
 alteram placares ou recompensas de partidas já realizadas. A V20 converte os bônus
 inteiros existentes em quartos de ponto, preservando seu valor. Contadores parciais
 antigos são zerados no próximo treino daquele fundamento, sem recompensa retroativa;
-retries de sessões antigas devolvem o resultado original. Ver ADR-0009.
+retries de sessões antigas devolvem o resultado original. A V31 converte os contadores
+de quartos em centésimos multiplicando por 25 e preserva atributos e recibos existentes.
+Ver ADR-0009 e ADR-0019.
 
 ## 11.6 Cansaço individual
+
+Duelos incrementais v4 usam desgaste variável por tempo das ações, ritmo e resistência
+física (ADR-0018). O cansaço cresce durante os trechos e reduz gradualmente os
+atributos, com maior efeito na velocidade. O custo total arredondado para cima é
+aplicado uma única vez ao cansaço inicial congelado, na conclusão. Recibos usam
+`policyVersion = "2"`. `GET /roster` acrescenta `coachedMatchStats`, a projeção dos
+atributos no início do duelo v4; `matchStats` preserva o cálculo legado. A Equipe
+mostra apenas os atributos permanentes. Cartões, seleções, recuperação e resultados
+representam a energia restante por uma bateria horizontal, sem contador numérico.
+A carga visual é `100 - fatigue.value`: desgaste esvazia e descanso recarrega.
+A condição autoritativa define a cor: disposto verde, cansado amarelo, muito cansado
+laranja e exausto vermelho. Nome da condição aparece no tooltip e na descrição
+acessível; tratamento ativo continua identificado por “Em recuperação”. Não se
+atribui uma única penalidade percentual aos cinco atributos. Pausas e tempo fora do jogo não recuperam o atleta dentro do
+duelo em andamento. Recuperação natural e condições abaixo continuam fora dele;
+duelos legados continuam com snapshot fixo e custo +18.
+
+Política original de atividades e condições:
 
 Por decisão explícita do usuário, o MVP passa a ter cansaço entre atividades (ADR-0011).
 Cada atleta começa com zero, inclusive em saves existentes. Treino gera +12;
@@ -766,7 +803,7 @@ não mudam, pois recebem os atributos já ajustados. Snapshots e recompensas his
 não são recalculados. A política de desgaste tem versão 1 nos novos recibos.
 
 Por nova solicitação explícita, o intervalo entre treinos foi removido (ADR-0012).
-Cansaço também não bloqueia treinos. Treinos continuam concedendo +0,25, sem XP ou mudança de nível;
+Cansaço também não bloqueia treinos. O ganho segue a tabela da seção 11.5, sem XP ou mudança de nível;
 o limite de 99 é verificado sobre atributos permanentes, antes da penalidade.
 Cansaço nunca bloqueia duelos de rua, inclusive com um único atleta. O estádio exige cinco atletas no elenco, independentemente da condição individual. Cansaço não muda XP, requisitos,
 retorno decrescente, troféus ou regras de retomada do estádio.
@@ -778,8 +815,8 @@ retorno decrescente, troféus ou regras de retomada do estádio.
 Recibos de treino, recompensa de rua e cada recompensa individual de estádio incluem
 `fatigue: { before, after, gained, policyVersion }`; recibos históricos usam `null`.
 `gained` indica o custo da atividade, mesmo quando o limite de 100 absorve parte dele.
-A interface mostra condição, penalidade, previsão de recuperação e desgaste recebido,
-com atualização autoritativa periódica enquanto a seleção estiver aberta.
+As seleções mostram a condição com atualização autoritativa periódica enquanto abertas.
+A seleção de treino usa cartões compactos e não mostra previsões nem recibos numéricos após a sessão.
 
 Partida/treino, desgaste e progresso são uma única transação. Comandos do perfil
 continuam serializados pelo lock existente. Retry recupera o recibo original antes
@@ -899,6 +936,17 @@ do cliente; no centro, os comandos de treino e recompensas continuam autoritativ
 backend. Moradores fazem pequenos movimentos de espera.
 O mapa do Benfica também inclui um estádio visível e um lago decorativo.
 Moradores e edifícios são conteúdo estático do mapa com IDs estáveis.
+A casa `benfica.house.01.entry` é o espaço de táticas da Dona Amélia, treinadora
+aposentada que treinou o Professor Dimas. Ao entrar, ela caminha até o visitante
+e oferece acompanhá-lo ao mural `benfica.house.01.tactics-board`. Aceitar leva os
+dois por caminhos livres de móveis até o quadro. A visita é opcional, pode ser
+fechada e não muda progresso; na retomada ou nova entrada, ela recebe o visitante
+novamente. Girar o celular para a vertical interrompe a caminhada. O mural pode
+ser relido por proximidade com E/Enter ou “Ler mural” no celular, e conversar com
+Amélia permite repetir a apresentação. A recepção apresenta uma informação por fala.
+Quinze páginas, cada uma com um único ensinamento, explicam as opções de ritmo e
+postura, cansaço e decisões de jogo, com navegação anterior/próxima. Placas,
+esquemas de jogadas, uma taça e uma lembrança de Dimas compõem a sala temática.
 O Benfica usa 72×84 tiles, incluindo a trilha isolada do Centro de Recuperação ao sul. O estádio fica no sudeste, no fim da rota dos
 desafiantes: Nilo → Cora → Davi → Bia → Rui → Sol → Teca → Zeca. A distância de cada
 desafiante ao estádio diminui conforme a dificuldade aumenta. Interiores possuem
@@ -937,7 +985,11 @@ CONVIDAR PARA O TIME
 
 No M5, o jogador recrutado começa no nível do desafiante, com XP e histórico zerados.
 O convite aparece no resultado da partida e na tela Equipe. Ao confirmar o recrutamento,
-o jogador passa a vestir as cores do time e desaparece do mapa, incluindo colisão e
+o atleta agradece: “Valeu por me chamar para o seu time! Vou dar o meu melhor!”.
+Após 2,5 segundos para ler a fala, a tela Equipe abre automaticamente e consulta
+o elenco atualizado no servidor. Um convite feito na própria Equipe exibe a mesma
+fala e atualiza essa tela, preservando o retorno à rua ou ao interior.
+O jogador passa a vestir as cores do time e desaparece do mapa, incluindo colisão e
 interação. O cliente deriva a presença do NPC do elenco retornado pelo servidor,
 usando `playerDefinitionId`; reload mantém essa ausência. Vencer sem convidar mantém
 o desafiante disponível no mapa para novas conversas e revanches. Vitórias válidas anteriores
@@ -969,6 +1021,11 @@ mas não podem contratar até dispensar atletas e deixar menos de cinco ativos.
 A tela Equipe mostra contagem de vagas (n/5), elenco, atributos, dispensa, convites e conquistas, sem slots de posição
 ou editor de escalação. Todas as novas partidas usam um atleta por lado, escolhido
 antes de cada duelo.
+
+A tela Seu Time usa textos curtos, condição resumida e atributos permanentes.
+Não mostra previsões ou horários de descanso, projeções de atributos no início do duelo
+nem instruções gerais de seleção. Somente convites disponíveis aparecem abaixo do elenco;
+NPCs bloqueados, não recrutáveis ou já contratados não geram mensagens nessa tela.
 
 ## 13.4 Dispensa
 
@@ -1207,6 +1264,31 @@ O Match Engine MUST evitar chance exata 0% ou 100% em situações normais.
 
 ## 16.6 1x1
 
+Por solicitação explícita do usuário, a interface cria duelos incrementais com o engine
+v4 (ADR-0018). Cada duelo possui cinco trechos de quatro minutos virtuais. O início
+reserva snapshots e seed; cada avanço simula somente o próximo trecho, recebendo
+ritmo (cadenciar/normal/apressar) e postura (defensivo/equilibrado/ofensivo).
+A interface oferece duas pausas automáticas de orientação: antes do apito e no
+intervalo, após o terceiro trecho. Ambas congelam o relógio virtual. Nos outros
+trechos, a orientação escolhida mais recentemente continua valendo; desligar a pausa
+automática mantém o fluxo contínuo. Mudanças durante o playback valem a partir do
+próximo trecho, com indicação de orientação pendente.
+
+Apressar encurta ações e aumenta esforço e risco. Cadenciar alonga ações e pode
+conservar a posse, reduzindo chances e desgaste. Ofensivo reforça criação e enfraquece
+marcação; defensivo faz o inverso. O motor distingue chute livre/pressionado e
+bloqueio/erro, usando sigmoid limitada a 10–90%. A resistência do marcador está
+representada na qualidade da chance, sem ser aplicada integralmente duas vezes.
+O adversário usa instruções neutras. Não há física ou goleiro explícito.
+
+Cada trecho persiste estado, eventos, posse, esforço e instrução de forma idempotente.
+Uma partida ativa por perfil bloqueia novos duelos e atividades mutáveis. CONTINUAR
+retoma a mesma partida. XP e demais recompensas só são confirmados no último avanço.
+O determinismo inclui o histórico de instruções e os snapshots de cansaço inicial.
+Versões v1/v3 e endpoints originais permanecem por compatibilidade e histórico.
+
+Modelo histórico v1:
+
 Modelo sugerido:
 
 1. determinar posse inicial pela seed;
@@ -1228,6 +1310,10 @@ Duração visual alvo:
 O backend MAY simular tudo em milissegundos.
 
 ## 16.7 Duelo de estádio
+
+Novos duelos na interface usam v4 incremental, com desempate por pênaltis apenas
+no último trecho. Reservar a partida não avança a sequência. Conclusão, XP,
+desgaste, avanço e eventual troféu são uma única transação. Histórico v3:
 
 `STADIUM_1V1` v3 usa a simulação regulamentar do duelo v1 e acrescenta pênaltis
 determinísticos quando necessário. Sempre há um vencedor. Os pênaltis são eventos
@@ -1318,6 +1404,11 @@ Não é necessário manter engines antigos executáveis para sempre no MVP, mas 
 # 17. Partida: fluxo transacional
 
 ## 17.1 Desafio de rua
+
+No fluxo incremental v4, início e avanços são transações independentes. O início
+valida e reserva snapshots; cada avanço valida a etapa e salva seu recibo e estado.
+A transação final também persiste `game_match`, XP, histórico, recrutamento e cansaço.
+Falha no recibo final desfaz todos esses efeitos. Fluxo original compatível:
 
 Comando:
 
@@ -1416,6 +1507,7 @@ Para fase com autenticação.
 id UUID PK
 email
 password_hash
+current_profile_id UUID FK
 created_at
 updated_at
 ```
@@ -1428,7 +1520,7 @@ Código de produção não deve aceitar identidade arbitrária fornecida pelo cl
 
 ```text
 id UUID PK
-user_id UUID UNIQUE
+user_id UUID FK nullable (legado local)
 display_name
 starter_selected BOOLEAN
 primary_color #RRGGBB
@@ -1439,6 +1531,11 @@ created_at
 updated_at
 version
 ```
+
+Na publicação Render/Neon (ADR-0017), uma conta pode ter jornadas anteriores
+preservadas e aponta para a jornada atual em `app_user.current_profile_id`.
+A FK composta garante que essa jornada pertence à própria conta. Perfis locais
+anteriores permanecem sem conta, sem adoção automática por e-mail ou ID do cliente.
 
 ## 19.3 player_definition
 
@@ -1661,9 +1758,11 @@ Para compatibilidade com clientes anteriores, omitir as cores usa `#f7d154` e
 
 `POST /api/v1/profile/new-game` recebe o mesmo corpo de criação e exige
 `Idempotency-Key: UUID`. Cria um novo perfil e o associa à sessão, sem apagar o
-perfil e as partidas anteriores. Durante a mesma sessão, retry do último comando
-retorna o mesmo perfil; reutilizar a chave com outro corpo recebe
-`409 IDEMPOTENCY_CONFLICT`. O comando é serializado na sessão do servidor.
+perfil e as partidas anteriores. A V28 persiste o recibo por conta autenticada
+(por sessão no modo local), com lock transacional PostgreSQL. A V29 guarda o
+snapshot da resposta: retry de qualquer chave retorna a mesma criação, inclusive
+após reinício ou novo login; reutilizar a chave com outro corpo recebe
+`409 IDEMPOTENCY_CONFLICT`. Retry antigo não troca a jornada atual da conta.
 O endpoint legado `/profiles` mantém seu contrato. A nova jornada é criada após
 Miguel confirmar as cores, para evitar um perfil incompleto antes da formatura.
 
@@ -1909,6 +2008,26 @@ checkpoints cosméticos antigos continuam válidos.
 
 ---
 
+## 20.15 Orientações durante a partida
+
+- `POST /challenges/{id}/coached-matches`: `Idempotency-Key`, `{ ownedPlayerId }`.
+- `POST /stadiums/{id}/coached-matches`: `Idempotency-Key`,
+  `{ ownedPlayerId, seriesId, roundNumber }`.
+- `GET /coached-matches/active`: `{ active: <resposta> | null }`, privado à sessão.
+- `GET /coached-matches/{id}`: estado atual privado à sessão.
+- `POST /coached-matches/{id}/advance`: `Idempotency-Key`,
+  `{ step: 0..4, instruction: { tempo: SLOW|NORMAL|FAST,
+  posture: DEFENSIVE|BALANCED|OFFENSIVE } }`.
+
+Resposta contém `match` com eventos já resolvidos, placar atual, `outcome: null`
+até concluir, `step`, `totalSteps: 5`, `elapsedSeconds`, `finished`, `instruction`,
+`homeFatigue`, `awayFatigue`, `roundNumber`, `rewards` e `stadiumRewards`.
+Recompensas são nulas antes da conclusão. Retry do início retorna o recibo original
+na etapa zero; retry de avanço retorna exatamente seu recibo, inclusive após concluir.
+Trocar corpo/chave já usada recebe `IDEMPOTENCY_CONFLICT`. Etapa desatualizada recebe
+`MATCH_STEP_CHANGED` (409); outro duelo/atividade recebe `MATCH_IN_PROGRESS` (409);
+partida alheia/inexistente recebe `MATCH_NOT_FOUND` (404).
+
 # 21. Formato de erro
 
 MUST ser consistente.
@@ -2056,7 +2175,7 @@ ausência dos controles no PC, diálogo/duelo real e acesso à academia/estádio
 - stats;
 - level;
 - arquétipo;
-- consulta dos atributos de um atleta selecionado;
+- consulta dos atributos permanentes de um atleta selecionado;
 - convites de recrutamento e bloqueio quando o elenco tem cinco;
 - dispensa confirmada do atleta selecionado;
 - conquistas;
@@ -2064,7 +2183,7 @@ ausência dos controles no PC, diálogo/duelo real e acesso à academia/estádio
 
 ## 22.5 MatchScene
 
-Recebe um `MatchResult`.
+Recebe trechos autoritativos de um duelo v4 ou um `MatchResult` histórico.
 
 Ela não calcula o resultado.
 
@@ -2128,9 +2247,13 @@ Sem checkpoint local, a retomada começa na entrada do bairro; uma jornada ainda
 sem starter retorna ao encontro com Miguel. A formatura antes da confirmação das
 cores ainda não tem save. INICIAR usa novo perfil, sem copiar progresso.
 
-A identidade ainda depende da sessão HTTP local, que não sobrevive ao reinício do
-backend. Retomada entre dispositivos ou reinícios do servidor exige a futura
-identidade persistente/autenticação; esta entrega não inventa conta ou token de save.
+Sessões HTTP são persistidas no PostgreSQL pela V27 e sobrevivem ao reinício do
+backend. No ambiente local, a identidade continua associada ao cookie da sessão.
+Em produção, a V28 e o login por e-mail/senha associam a jornada à conta; um novo
+login retoma a jornada atual, inclusive em outro dispositivo. O checkpoint geométrico
+continua local. Sessões expiram após sete dias sem uso; novo login recupera o save.
+Não há recuperação de senha, verificação de e-mail ou seleção de jornadas arquivadas
+nesta entrega. Ver ADR-0017 e `docs/DEPLOY_RENDER.md`.
 
 IndexedDB/localStorage MAY ser usado para:
 
@@ -2160,6 +2283,16 @@ Para desenvolvimento inicial:
 Antes de publicação pública:
 
 - autenticação MUST existir.
+
+O profile `production` implementa cadastro e login por e-mail/senha com Spring
+Security e BCrypt. `GET /api/v1/auth` informa `enabled`, `authenticated`, `email`,
+`csrfToken` e `csrfHeader`; apenas cadastro/login/status e assets/health são públicos.
+`POST /api/v1/auth/register` recebe JSON `{ email, password }`; login recebe formulário
+em `POST /api/v1/auth/login` com campos `email` e `password`. Logout é POST em
+`/api/v1/auth/logout`. Cadastro, login, logout e comandos mutáveis exigem CSRF.
+O cliente renova o token após login, que rotaciona a sessão. Senhas têm de 12 a 72
+caracteres e no máximo 72 bytes UTF-8. Não há envio de e-mail nesta entrega.
+Ambientes locais mantêm o fluxo de desenvolvimento sem login.
 
 ## 25.2 Estratégia recomendada
 
@@ -2378,11 +2511,27 @@ interior entre duelos. Animações e comentários não alteram a simulação.
 
 ## 29.2 Timing
 
-O backend retorna tudo imediatamente.
+Os controles de orientação usam uma prancheta com dois grupos de três botões:
+ritmo e postura. Cada opção tem ícone original, nome e destaque da seleção;
+clique, toque ou teclado mudam a orientação, sem selects. A pausa automática
+usa um interruptor visual, e continuar é a ação principal. Indicadores compactos
+mostram os dois momentos de orientação, o estado da pausa e a mudança pendente. Não exibem
+explicações de efeitos táticos ou números de cansaço nesse painel. Essas dicas
+ficam no mural da casa da Dona Amélia; as regras de simulação permanecem iguais.
 
-Frontend anima.
+Na orientação inicial e no intervalo, o atleta próprio vai
+até a beira da quadra e fica de frente para o avatar fixo do treinador do usuário,
+recebendo instruções. O adversário aguarda e a bola fica oculta durante a conversa.
+Continuar devolve o atleta ao jogo e retira o treinador; fluxo contínuo não mostra
+essa pausa entre trechos. A lateral e os dois avatares se ajustam à altura da quadra,
+inclusive no estádio e no celular. Essa encenação não recupera cansaço nem muda
+eventos, placar, instruções ou recompensas do backend.
 
-Não usar request por evento.
+O backend retorna um lote por trecho nos duelos v4. O frontend anima cada trecho e
+oferece orientação antes do apito e no intervalo. O alvo de reprodução é aproximadamente
+seis segundos por trecho, além das celebrações e do tempo livre nas pausas.
+Pular conclui as etapas restantes com a orientação selecionada; não inventa resultado.
+Versões históricas continuam com lote único. Não usar request por evento.
 
 ## 29.3 Feedback de atributos
 
@@ -2845,7 +2994,8 @@ interrompe inclusive sons em andamento. Ocultar a aba pausa o áudio; retornar r
 a trilha atual. Ver ADR-0014.
 As chamadas HTTP expiram após 15 segundos para permitir retry nas telas existentes.
 Reload abre o menu; CONTINUAR restaura progresso do servidor durante a sessão HTTP e o último checkpoint local.
-Autenticação e retomada entre reinícios do servidor não fazem parte desta entrega local.
+A publicação de nuvem acrescenta autenticação e sessões persistentes (ADR-0017);
+o desenvolvimento local conserva o fluxo sem login.
 
 Validação: `MilestoneSevenIntegrationTest` completa o bairro com os três starters e
 mede simulações com conteúdo real, incluindo os primeiros quatro duelos e a chance de completar a sequência do estádio.
@@ -2901,8 +3051,17 @@ WHEN
 inicio o desafio
 
 THEN
-o backend cria exatamente 1 match
-e calcula o resultado
+o backend reserva exatamente um duelo em andamento
+sem calcular o resultado dos trechos futuros
+
+WHEN
+oriento o atleta e continuo os cinco trechos
+
+THEN
+cada trecho usa as instruções escolhidas e atualiza eventos e cansaço
+
+AND
+o último trecho confirma resultado e recompensas uma única vez
 
 WHEN
 o frontend recebe o resultado
@@ -2977,7 +3136,7 @@ Para o MVP:
 7. Backend autoritativo.
 8. Match Engine no backend.
 9. Match Engine determinístico por seed.
-10. Eventos simulados enviados em lote.
+10. Eventos simulados enviados em lotes por trecho, com orientação entre eles (ADR-0018).
 11. Sem WebSocket.
 12. Sem Redis.
 13. Sem mensageria.
@@ -3036,6 +3195,14 @@ Managed PostgreSQL
 ```
 
 Não precisa auto-scaling sofisticado.
+
+Para a publicação gratuita escolhida pelo usuário, `Dockerfile.render` inclui o
+frontend compilado no JAR e um único Web Service Free serve jogo/API na mesma origem.
+O banco externo já criado fica no Neon, com JDBC/SSL e migrations na inicialização.
+`render.yaml` configura runtime Docker, plano Free, `/health` e solicita credenciais
+por variáveis não versionadas. Compose local permanece separado. O ensaio
+`compose.deploy-test.yaml` usa PostgreSQL próprio, login de produção e limite de 512 MB;
+`npm run test:deploy` cobre o fluxo real com contas. Ver `docs/DEPLOY_RENDER.md`.
 
 ## 40.2 Ambientes
 
@@ -3407,7 +3574,7 @@ Se precisar reduzir tudo a dez regras:
 4. PostgreSQL controla o save.
 5. O backend é autoritativo.
 6. Match Engine é puro, determinístico e versionado.
-7. REST retorna a partida inteira; frontend apenas reproduz.
+7. REST retorna trechos da partida; frontend reproduz e envia orientações para o próximo trecho.
 8. Uma partida + recompensas é transacional e idempotente.
 9. Primeiro entregar um bairro completo; não expandir cedo.
 10. Não sobrearquitetar.

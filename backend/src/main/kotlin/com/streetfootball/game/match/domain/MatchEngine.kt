@@ -10,7 +10,19 @@ enum class MatchSide { HOME, AWAY }
 
 enum class MatchOutcome { WIN, DRAW, LOSS }
 
-enum class MatchEventType { POSSESSION, DRIBBLE_SUCCESS, TACKLE, SHOT, SHOT_MISSED, GOAL, SAVE, PENALTY_GOAL, PENALTY_MISSED }
+enum class MatchEventType {
+    POSSESSION,
+    DRIBBLE_SUCCESS,
+    TACKLE,
+    SHOT,
+    SHOT_MISSED,
+    GOAL,
+    SAVE,
+    PENALTY_GOAL,
+    PENALTY_MISSED,
+    HOLD,
+    SHOT_BLOCKED,
+}
 
 data class MatchStats(
     val speed: Double,
@@ -49,6 +61,9 @@ data class MatchRequest(
     val seed: Long,
     val engineVersion: String,
     val awayKeeperBase: Int = 35,
+    val coaching: List<CoachInstruction> = emptyList(),
+    val homeInitialFatigue: Double = 0.0,
+    val awayInitialFatigue: Double = 0.0,
 ) {
     init {
         val size = if (mode == MatchMode.STADIUM_5V5) 5 else 1

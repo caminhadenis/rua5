@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { finishedDuel } from './helpers/coachedMatch'
 import { continueGame } from './helpers/opening'
 
 async function monitorCues(page: Page) {
@@ -96,15 +97,16 @@ test('attention once per approach, accepted duel, whistle, actual outcome and re
   await page.waitForTimeout(300)
   expect((await cues(page)).filter(cue => cue === 'attention')).toHaveLength(1)
   await page.keyboard.press('Enter', { delay: 80 })
-  const response = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/matches'))
+  const response = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/coached-matches'))
   await page.getByRole('button', { name: 'Iniciar desafio', exact: true }).click()
   await expect(sound).toHaveAttribute('data-playing', 'duel')
-  const result = await (await response).json()
+  const initial = await (await response).json()
   await expect(page.getByRole('region', { name: 'Partida', exact: true })).toBeVisible()
   expect(await cues(page)).toContain('whistle')
   expect(await amplitude(page)).toBeGreaterThan(0.001)
   await page.getByRole('button', { name: 'Pular', exact: true }).click()
   await expect(page.getByTestId('match-result')).toBeVisible()
+  const result = await finishedDuel(page, initial.match.id)
   expect((await cues(page)).at(-1)).toBe({ WIN: 'win', LOSS: 'loss', DRAW: 'draw' }[result.match.outcome as 'WIN' | 'LOSS' | 'DRAW'])
   await expect(sound).toHaveAttribute('data-playing', '')
   // Presentation fixtures exercise every authoritative outcome without changing saved progress.
